@@ -109,7 +109,7 @@ namespace LinuxAvatarGuard
                 throw new InvalidOperationException("Selecciona una copia protegida de Linux Avatar Guard.");
             var key = Path.GetFullPath("Library/LinuxAvatarGuard/" + id + ".json");
             if (!File.Exists(key))
-                key = EditorUtility.OpenFilePanel("Seleccionar respaldo privado de esta copia", "", "json");
+                key = EditorUtility.OpenFilePanel(GuardText.Text("Seleccionar respaldo privado de esta copia"), "", "json");
             if (string.IsNullOrEmpty(key))
                 return null;
             if (JsonUtility.FromJson<GuardKeyFile>(File.ReadAllText(key)).buildId != id)

@@ -12,7 +12,7 @@ namespace LinuxAvatarGuard
             {
                 if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
                     return;
-                var key = "LinuxAvatarGuard.Welcome.0.2.0." + Application.dataPath;
+                var key = "LinuxAvatarGuard.Welcome." + GuardText.Version + "." + Application.dataPath;
                 if (EditorPrefs.GetBool(key))
                     return;
                 EditorPrefs.SetBool(key, true);

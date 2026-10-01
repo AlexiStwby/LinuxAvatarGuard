@@ -29,7 +29,7 @@ namespace LinuxAvatarGuard
     }
     public static class GuardProfiles
     {
-        public const string Version = "0.2.0";
+        public const string Version = GuardText.Version;
         [DllImport("libc", SetLastError = true)]
         static extern int chmod(string pathname, uint mode);
         public static string DataRoot

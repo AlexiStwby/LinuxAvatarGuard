@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+- ES / EN / JP language selector in the wizard, with Spanish as the default.
+- Immediate translation with a persistent Editor preference shared between projects.
+- Localized wizard controls, notices, displayed validation errors, OSC status, tool dialogs and protected-material Inspector.
+- English instructions updated to match the English UI; Japanese quick start added.
+- Existing profiles, keys, menu paths and uploaded avatars are preserved; no regeneration or reupload is required.
+
 ## 0.2.0
 - Three-step Unity wizard, opened once after installation.
 - Automatic avatar-root detection, compatibility validation and independent upload-scene generation.

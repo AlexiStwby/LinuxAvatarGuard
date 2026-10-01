@@ -2,17 +2,17 @@
 
 Gratis, open source y experimental. Ofuscación de geometría para avatares VRChat PC con lilToon, preparada desde Unity nativo para Linux con Vulkan. La herramienta crea una copia independiente; conserva el avatar original y guarda las claves fuera del proyecto.
 
-**[Descargar 0.2.0](https://github.com/AlexiStwby/LinuxAvatarGuard/releases/tag/v0.2.0)** · [Guía en español](Package/Assets/LinuxAvatarGuard/README.es.md) · [English guide](Package/Assets/LinuxAvatarGuard/QUICKSTART.en.md) · [MIT](LICENSE)
+**[Descargar 0.2.1](https://github.com/AlexiStwby/LinuxAvatarGuard/releases/tag/v0.2.1)** · [Guía en español](Package/Assets/LinuxAvatarGuard/README.es.md) · [English guide](Package/Assets/LinuxAvatarGuard/QUICKSTART.en.md) · [日本語ガイド](Package/Assets/LinuxAvatarGuard/QUICKSTART.jp.md) · [MIT](LICENSE)
 
 ![Linux Avatar Guard](dist/booth/Cover.png)
 
 ## Instalación y uso
 
-1. Prepara un proyecto de avatar con VRChat SDK Avatars, lilToon y Python 3. Abre Unity en Linux con Vulkan e importa `LinuxAvatarGuard-0.2.0.unitypackage` desde la release.
+1. Prepara un proyecto de avatar con VRChat SDK Avatars, lilToon y Python 3. Abre Unity en Linux con Vulkan e importa `LinuxAvatarGuard-0.2.1.unitypackage` desde la release.
 2. Selecciona el avatar y abre **Tools > Linux Avatar Guard > Asistente**. Pulsa **Comprobar y preparar avatar** y revisa la copia en su escena de subida.
 3. Publica con el SDK, pulsa **Vincular avatar publicado** y después **Iniciar desbloqueo OSC** con OSC activado en VRChat. También puedes usar el lanzador privado sin mantener Unity abierto.
 
-El asistente está en español. No necesitas editar JSON ni instalar módulos de Python. Desde 0.1.1 puedes reconocer una copia existente sin regenerar o volver a publicar un avatar funcional.
+El asistente permite elegir ES / EN / JP arriba de la ventana; español es el idioma predeterminado. El cambio es inmediato y se guarda entre sesiones del Editor. No necesitas editar JSON ni instalar módulos de Python. Desde 0.1.1 puedes reconocer una copia existente sin regenerar o volver a publicar un avatar funcional. La actualización desde 0.2.0 conserva los perfiles existentes.
 
 Validado con Unity 2022.3.22f1, SDK Avatars 3.10.5 y lilToon 2.3.4 en Built-in Render Pipeline. La preparación es exclusiva de Linux; el avatar publicado es Windows PC. Gesture Manager es opcional para comprobar las capas FX en Play Mode.
 
@@ -36,13 +36,13 @@ Pruebas OSC, desde la raíz del repositorio:
 python3 -m unittest discover -s Tests -p 'test_osc.py' -v
 ```
 
-Para exportar, usa **Tools > Linux Avatar Guard > Exportar herramienta para distribuir** en Unity y guarda el archivo como `dist/LinuxAvatarGuard-0.2.0.unitypackage`. Después ejecuta `python3 Tests/build_release.py` para crear los ZIP públicos y sus hashes. El exportador excluye dependencias de avatares y claves. Consulta el [informe de validación](dist/booth/RELEASE-VALIDATION.md).
+Para exportar, usa **Tools > Linux Avatar Guard > Exportar herramienta para distribuir** en Unity y guarda el archivo como `dist/LinuxAvatarGuard-0.2.1.unitypackage`. Después ejecuta `python3 Tests/build_release.py` para crear los ZIP públicos y sus hashes. El exportador excluye dependencias de avatares y claves. Consulta el [informe de validación](dist/booth/RELEASE-VALIDATION.md).
 
 Aceptamos issues y pull requests. Indica versiones de Unity/SDK/lilToon y pasos para reproducir el problema; no adjuntes claves privadas ni avatares de terceros sin permiso.
 
 ## English
 
-Free, MIT-licensed experimental mesh obfuscation for VRChat PC avatars with lilToon. Preparation requires native Linux Unity with Vulkan; the uploaded avatar targets Windows PC. The wizard creates an independent copy, keeps private keys outside the project, and provides a local OSC launcher. The editor UI is in Spanish; an [English guide](Package/Assets/LinuxAvatarGuard/QUICKSTART.en.md) is included.
+Free, MIT-licensed experimental mesh obfuscation for VRChat PC avatars with lilToon. Preparation requires native Linux Unity with Vulkan; the uploaded avatar targets Windows PC. The wizard creates an independent copy, keeps private keys outside the project, and provides a local OSC launcher. The editor UI supports Spanish (default), English and Japanese; an [English guide](Package/Assets/LinuxAvatarGuard/QUICKSTART.en.md) is included.
 
 Download the `.unitypackage` from [Releases](https://github.com/AlexiStwby/LinuxAvatarGuard/releases), prepare a copy, upload through the official SDK, link its published ID, and start OSC. This is not strong encryption or complete anti-ripping protection. Textures and GPU capture are not protected; synchronized keys and shaders can be analyzed to reconstruct the mesh.
 

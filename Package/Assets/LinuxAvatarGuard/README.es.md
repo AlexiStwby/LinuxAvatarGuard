@@ -1,4 +1,4 @@
-# Linux Avatar Guard 0.2.0 — gratis y experimental
+# Linux Avatar Guard 0.2.1 — gratis y experimental
 
 Ofuscación de geometría para avatares VRChat PC con lilToon. Prepara una copia independiente desde Unity Linux + Vulkan y la reconstruye con cuatro parámetros enviados por OSC local. No es cifrado fuerte: no protege texturas, no impide capturas GPU ni garantiza impedir todo ripping.
 
@@ -6,7 +6,9 @@ Ofuscación de geometría para avatares VRChat PC con lilToon. Prepara una copia
 
 1. En tu proyecto de avatar instala VRChat SDK Avatars y lilToon con ALCOM/VCC. Necesitas Python 3 instalado en Linux. Gesture Manager es opcional para probar Play Mode.
 2. Abre Unity nativo para Linux con Vulkan. Si usas Hub y no está en Vulkan, cierra el Editor y ejecútalo con `-force-vulkan -projectPath '/ruta/proyecto'`. `Tools/launch-unity-vulkan.sh` puede ayudarte.
-3. Importa `LinuxAvatarGuard-0.2.0.unitypackage`. El asistente se abre la primera vez; también está en Tools > Linux Avatar Guard > Asistente. No requiere copiar scripts a mano ni instalar módulos de Python.
+3. Importa `LinuxAvatarGuard-0.2.1.unitypackage`. El asistente se abre la primera vez; también está en Tools > Linux Avatar Guard > Asistente. No requiere copiar scripts a mano ni instalar módulos de Python.
+
+El selector **Idioma** está arriba del asistente: **ES** (español), **EN** (inglés) y **JP** (japonés). Español es el idioma predeterminado. Cambia al momento y conserva tu elección al cerrar o reiniciar Unity, también entre proyectos. Traduce botones, avisos, errores mostrados en el asistente, estados OSC, diálogos propios e Inspector de materiales protegidos. Los menús de Unity conservan sus rutas existentes; no cambia los nombres de tus objetos, archivos ni datos privados.
 
 ## Tres pasos
 
@@ -42,7 +44,7 @@ Si la herramienta no encuentra Python, instala `python3` con el gestor de tu dis
 
 ## Actualizar desde 0.1.1
 
-Importa 0.2.0 encima de la carpeta existente. Selecciona tu copia protegida y pulsa **Reconocer copia protegida existente**. Lee su clave de Library o te permite elegir el respaldo privado si Library ya no existe; comprueba que el buildId corresponde a esa copia. Detecta el ID publicado y prepara los lanzadores. No requiere regenerar ni volver a publicar un avatar funcional.
+Importa 0.2.1 encima de la carpeta existente. Selecciona tu copia protegida y pulsa **Reconocer copia protegida existente**. Lee su clave de Library o te permite elegir el respaldo privado si Library ya no existe; comprueba que el buildId corresponde a esa copia. Detecta el ID publicado y prepara los lanzadores. No requiere regenerar ni volver a publicar un avatar funcional. Actualizar desde 0.2.0 sólo añade idiomas y conserva los perfiles existentes.
 
 ## Compatibilidad y límites
 

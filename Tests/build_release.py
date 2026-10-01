@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Allowlisted public archives. Private projects/evidence are never traversed."""
 from pathlib import Path
-import hashlib, json, tarfile, zipfile
+import hashlib, json, re, tarfile, zipfile
 root=Path(__file__).resolve().parents[1];package=root/'Package/Assets/LinuxAvatarGuard';out=root/'dist/booth';out.mkdir(parents=True,exist_ok=True)
-version='0.2.0';unity=root/'dist'/f'LinuxAvatarGuard-{version}.unitypackage'
+version=re.search(r'public const string Version = "([^"]+)"', (package/'Editor/GuardText.cs').read_text()).group(1);unity=root/'dist'/f'LinuxAvatarGuard-{version}.unitypackage'
 assert unity.exists(), 'Export the Unity package first'
 # Every exported asset must belong to the source package folder.
 paths=[]
@@ -14,7 +14,7 @@ with tarfile.open(unity,'r:gz') as archive:
     assert any(p.endswith('/Editor/GuardSetup.cs') for p in paths)
     assert any(p.endswith('/Tools/lag_osc.py') for p in paths)
 public=[('LinuxAvatarGuard-'+version+'.unitypackage',unity)]
-for name in ['README.es.md','QUICKSTART.en.md','LICENSE.txt','THIRD-PARTY-NOTICES.md','CHANGELOG.md','VALIDATION.es.md']:
+for name in ['README.es.md','QUICKSTART.en.md','QUICKSTART.jp.md','LICENSE.txt','THIRD-PARTY-NOTICES.md','CHANGELOG.md','VALIDATION.es.md']:
     public.append((name,package/name))
 public.append(('RELEASE-VALIDATION.md',out/'RELEASE-VALIDATION.md'))
 for name in ['Cover.png','Workflow.png']:public.append(('Images/'+name,out/name))
@@ -34,5 +34,5 @@ manifest={}
 for path in [unity,out/f'LinuxAvatarGuard-{version}-BOOTH.zip',out/f'LinuxAvatarGuard-{version}-sources.zip']:
     manifest[path.name]={'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size}
 (out/'SHA256SUMS.txt').write_text(''.join(value['sha256']+'  '+name+'\n' for name,value in manifest.items()))
-(out/'release-manifest.json').write_text(json.dumps({'version':version,'exportedAssets':len(paths),'files':manifest,'includesAvatars':False,'includesPrivateKeys':False,'sdkFreeImportPassed':True,'coreChecks':26,'oscTests':6,'gestureManagerPreviewPassed':True,'sdkLocalBuildPassed':True},indent=2))
+(out/'release-manifest.json').write_text(json.dumps({'version':version,'exportedAssets':len(paths),'files':manifest,'includesAvatars':False,'includesPrivateKeys':False,'sdkFreeImportPassed':True,'coreChecks':26,'oscTests':6,'coreValidatedVersion':'0.2.0','gestureManagerPreviewPassed':True,'sdkLocalBuildPassed':True,'uiLanguages':['ES','EN','JP'],'defaultLanguage':'ES','localizationChecksPassed':True},indent=2))
 print(json.dumps(manifest,indent=2))

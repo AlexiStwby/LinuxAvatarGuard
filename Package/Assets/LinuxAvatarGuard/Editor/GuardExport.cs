@@ -10,7 +10,7 @@ namespace LinuxAvatarGuard
         [MenuItem("Tools/Linux Avatar Guard/Exportar herramienta para distribuir")]
         static void Open()
         {
-            var path=EditorUtility.SaveFilePanel("Exportar sólo Linux Avatar Guard", "", "LinuxAvatarGuard-0.2.0", "unitypackage");
+            var path=EditorUtility.SaveFilePanel(GuardText.Text("Exportar sólo Linux Avatar Guard"), "", "LinuxAvatarGuard-"+GuardText.Version, "unitypackage");
             if (!string.IsNullOrEmpty(path)) Export(path);
         }
         public static void Export(string destination)

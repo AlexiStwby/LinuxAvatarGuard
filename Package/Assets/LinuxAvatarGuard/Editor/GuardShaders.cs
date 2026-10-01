@@ -91,7 +91,7 @@ namespace LinuxAvatarGuard
     {
         public override void OnGUI(MaterialEditor editor, MaterialProperty[] properties)
         {
-            EditorGUILayout.HelpBox("Material generado. Edita lilToon en el avatar original y vuelve a generar la copia. Las claves se aplican mediante OSC.", MessageType.Info);
+            EditorGUILayout.HelpBox(GuardText.Text("Material generado. Edita lilToon en el avatar original y vuelve a generar la copia. Las claves se aplican mediante OSC."), MessageType.Info);
         }
     }
 }
