@@ -1,0 +1,16 @@
+{
+  "name": "LinuxAvatarGuard.Validation",
+  "includePlatforms": [
+    "Editor"
+  ],
+  "references": [
+    "LinuxAvatarGuard.Editor"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.vrchat.avatars",
+      "expression": "3.0.0",
+      "define": "LAG_VRCSDK"
+    }
+  ]
+}

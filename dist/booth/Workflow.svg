@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900"><rect width="1200" height="900" fill="#0b1320"/>
+<g font-family="DejaVu Sans, sans-serif"><text x="72" y="100" fill="#fff" font-size="45" font-weight="bold">Three steps. One private copy.</text><text x="72" y="147" fill="#9eb2c8" font-size="22">Linux Avatar Guard 0.2.0 · Unity wizard</text>
+<g stroke="#294154" fill="#142334"><rect x="72" y="206" width="1056" height="160" rx="20"/><rect x="72" y="394" width="1056" height="160" rx="20"/><rect x="72" y="582" width="1056" height="160" rx="20"/></g>
+<g fill="#78efc8" font-size="35" font-weight="bold"><text x="107" y="265">1</text><text x="107" y="453">2</text><text x="107" y="641">3</text></g>
+<g fill="#fff" font-size="28" font-weight="bold"><text x="164" y="265">Prepare your avatar</text><text x="164" y="453">Review and upload</text><text x="164" y="641">Link and unlock</text></g>
+<g fill="#bad0df" font-size="21"><text x="164" y="310">Select the avatar → validate → independent prefab + upload scene</text><text x="164" y="498">Preview with Gesture Manager → publish through the official SDK</text><text x="164" y="686">Detect the published ID → enable VRChat OSC → start the launcher</text></g>
+<text x="72" y="804" fill="#78efc8" font-size="22">Private backups outside Unity Library. No JSON editing required.</text><text x="72" y="847" fill="#819bb4" font-size="17">Linux + Vulkan + lilToon · PC avatars · Experimental · Keep OSC running to unlock</text></g></svg>
