@@ -131,6 +131,18 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Next stage:** Stage 9, benchmark original/legacy/contextual en fixtures propias y hardware fijo: CPU/GPU, VRAM, draw calls, variantes, tamaños/tiempos de build y presupuestos. Mantener el gate de skinning hasta una validación específica; ninguna captura/análisis se realizará en VRChat.
 
+## Stage 9 — Performance benchmark
+
+**Status:** primer benchmark rígido completado en player propio Linux/Vulkan sin SDK. Rendimiento de avatares skinned/procesados por SDK pendiente.
+
+**Changes:** [LAGPerformanceValidation.cs](../Tests/LAGPerformanceValidation.cs) prepara tres bundles equivalentes de geometría propia; originales/fuentes lilToon byte idénticos y materiales serializados con valores de desbloqueo cero. [Tests/Performance](../Tests/Performance) aporta player Release, medición de frames/counters, lectura DRM solo del PID propio, rondas alternadas y captura/análisis RenderDoc separados. Los informes fijan hashes de bundles/assemblies y umbrales provisionales del hardware medido. Contrato/método/resultados: [PERFORMANCE_BENCHMARK.md](PERFORMANCE_BENCHMARK.md).
+
+**Tests:** 30 comprobaciones de preparación; 36 ejecuciones aisladas y 24 rondas pareadas (72 bloques). **403.103 frames** finales, diez PNG de validación y cinco PNG de captura, tres capturas Vulkan. GPU/CPU, FPS, buffers/DRM/RSS, draw calls, variantes, generación y tamaño/build de bundles medidos. Diferencia visual desbloqueada **0** en ambos codecs y cantidades; medianas de draws/triángulos iguales. Control ShaderForge/original con dieciséis copias: incremento GPU pareado **≈ 0,02862 ms**, intervalo exploratorio **0,01056–0,03846 ms**; una copia no resuelve diferencia frente al ruido. Instrucciones vertex GEN reportadas por Intel: original **3.392**, legacy **3.412**, contextual **3.442/3.444**. Fragment shaders idénticos por SHA-256.
+
+**Known issues:** en la fixture con mesh original compartida, contextual utiliza **2,54×** los buffers de geometría y **2,53×** el bundle; preparar/importar también cuesta más. Native GPU timing instrumentado, relojes/escritorio sin fijar, unlit/mono/opaque y filtro de variantes de investigación. Memoria DRM es contabilidad por clientes con posibles buffers compartidos; no se presenta como VRAM física única. Los controles alternados mantienen las tres variantes residentes y no se usan para atribuir memoria. Se conservaron todos los valores transitorios de counters. La importación inicial del player tuvo compilación transitoria resuelta; un fallo de instrumentación al comprobar cada frame y una excepción al descargar bundles durante cierre fueron corregidos en los helpers. Las ejecuciones y compilación finales son correctas, sin excepciones de player ni errores C#/shader. No se analiza VRChat; skinning, Animator bajo carga, SDK y matriz gráfica ampliada siguen pendientes.
+
+**Next stage:** Stage 10, investigación TextureGuard: sampling/import/mipmaps, calidad, exposición GPU y coste antes de un piloto. Mantener el gate de skinning y usar los presupuestos/métodos de Stage 9 como referencia.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -188,7 +200,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 6 | Diversity tests | 100 builds estáticos completos + extractor; 2.714 comprobaciones; SDK/animación pendientes. |
 | 7 | Dynamic attributes | Allocator estático validado: 683 comprobaciones originales, doce layouts y seis pares Vulkan. |
 | 8 | ShaderForge integration | Investigación rígida/genérica implementada: 182 comprobaciones, copias por binding/slot y clips/controllers; skinning/SDK pendientes. |
-| 9 | Performance benchmark | Pendiente; medir original/legacy/nuevo y fijar presupuestos. |
+| 9 | Performance benchmark | Benchmark rígido completado: 36 procesos, 24 rondas pareadas, 403.103 frames y recursos/ISA medidos; SDK/skinning pendientes. |
 | 10 | TextureGuard research | Pendiente; entregar investigación de sampling/import/mipmaps. |
 | 11 | TextureGuard prototype | Pendiente; piloto de albedo opaco y copias independientes. |
 | 12 | TextureGuard integration | Pendiente; ampliar por tipo de textura tras validar calidad/coste. |

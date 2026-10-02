@@ -1,0 +1,5 @@
+{
+  "name": "LinuxAvatarGuard.Performance.Editor",
+  "includePlatforms": ["Editor"],
+  "references": ["LinuxAvatarGuard.Performance"]
+}

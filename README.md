@@ -38,6 +38,8 @@ La [evaluación de 100 builds sintéticos](docs/CODEC_DIVERSITY_RESULTS.md) mide
 
 El [ShaderForge contextual](docs/GENERATED_SHADER_FORGE.md) añade copias por renderer/slot y remapea los cambios de material de clips/controllers de un Animator genérico. Sigue limitado a mallas rígidas de investigación; el asistente utiliza la ruta de avatares ya validada.
 
+El [benchmark de rendimiento](docs/PERFORMANCE_BENCHMARK.md) compara original, legacy y ShaderForge en un player Linux/Vulkan propio: 36 ejecuciones, rondas alternadas, CPU/GPU, recursos y shaders compilados. Conserva la apariencia desbloqueada y cuantifica el coste de copias por binding; los resultados describen fixtures rígidas y el hardware medido.
+
 Pruebas OSC, desde la raíz del repositorio:
 
 ```sh

@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased — security foundation
+- Reproducible SDK-free Linux/Vulkan performance player: isolated original/legacy/contextual runs, paired interleaved rounds, frame/counter CSVs and own-process DRM memory accounting.
+- Separate owned-player RenderDoc/SPIR-V and Intel driver executable statistics; native visual parity and resource/build cost results, with provisional same-hardware regression budgets.
 - Research-only contextual ShaderForge: per-renderer/slot materials, opaque shader families and contextual material-swap clips/controller copies; avatar preparation remains legacy.
 - Generic Animator analysis with persisted dependency fingerprints, animated ID Mask blending reservations and strict rejection of unsupported components/curves/graphs.
 - Rebuild contextual AnimatorOverrideController bindings with the public ApplyOverrides API; generated output rollback and atomic in-memory plan registration.

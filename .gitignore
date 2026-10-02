@@ -18,6 +18,7 @@
 !/docs/DYNAMIC_ATTRIBUTE_RESEARCH.md
 !/docs/DYNAMIC_ATTRIBUTE_ALLOCATION.md
 !/docs/GENERATED_SHADER_FORGE.md
+!/docs/PERFORMANCE_BENCHMARK.md
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -46,6 +47,8 @@
 !/Tests/LAGDiversityVariantFilter.cs
 !/Tests/LAGAttributeValidation.cs
 !/Tests/LAGShaderForgeValidation.cs
+!/Tests/LAGPerformanceValidation.cs
+!/Tests/Performance/
 
 /dist/*
 !/dist/booth/
