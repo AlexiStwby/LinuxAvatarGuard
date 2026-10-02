@@ -22,7 +22,7 @@ namespace LinuxAvatarGuard
                     coefficients.z * key[2] + coefficients.w * key[3]) / 255f;
         }
 
-        public static Mesh Encode(Mesh source, int[] key, float strength)
+        public static void ValidateInputs(Mesh source, int[] key, float strength)
         {
             if (source == null || !source.isReadable) throw new InvalidOperationException("La malla debe ser legible. No se cambia su importador automáticamente.");
             if (key == null || key.Length != 4 || Array.Exists(key, x => x < 0 || x > 255)) throw new ArgumentException("Clave inválida.");
@@ -46,6 +46,13 @@ namespace LinuxAvatarGuard
                     for (int i = 0; i < dn.Length; i++)
                         if (dn[i].sqrMagnitude > 1e-12f) throw new InvalidOperationException("Blendshape con deltas de normales: no es compatible con este decodificador conservador. No se elimina ni se modifica el blendshape.");
                 }
+        }
+
+        public static Mesh Encode(Mesh source, int[] key, float strength)
+        {
+            ValidateInputs(source, key, strength);
+            var vertices = source.vertices;
+            var normals = source.normals;
             var uv6 = new List<Vector2>(vertices.Length); var uv7 = new List<Vector2>(vertices.Length);
             var bytes = new byte[vertices.Length * 4];
             using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(bytes);

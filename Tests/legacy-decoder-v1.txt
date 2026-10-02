@@ -1,0 +1,8 @@
+
+        HLSLINCLUDE
+        #define LIL_REQUIRE_APP_NORMAL
+        #define LIL_REQUIRE_APP_TEXCOORD6
+        #define LIL_REQUIRE_APP_TEXCOORD7
+        #define LIL_CUSTOM_PROPERTIES float _LAGKey0; float _LAGKey1; float _LAGKey2; float _LAGKey3;
+        #define LIL_CUSTOM_VERTEX_OS positionOS.xyz -= input.normalOS * dot(float4(input.uv6, input.uv7), clamp(floor(float4(_LAGKey0, _LAGKey1, _LAGKey2, _LAGKey3) + 0.5), 0.0, 255.0) / 255.0);
+        ENDHLSL

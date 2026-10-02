@@ -18,19 +18,17 @@ namespace LinuxAvatarGuard
             "Hidden/lilToonTwoPassTransparent", "Hidden/lilToonTwoPassTransparentOutline"
         };
         readonly string folder, buildId;
+        readonly DecoderFragment decoder;
         readonly Dictionary<string, string> generated = new Dictionary<string, string>();
-        public GuardShaders(string folder, string buildId) { this.folder = folder; this.buildId = buildId; }
+        public GuardShaders(string folder, string buildId) : this(folder, buildId, LegacyLinearCodecV1.Decoder) { }
+        public GuardShaders(string folder, string buildId, DecoderFragment decoder)
+        {
+            this.folder = folder; this.buildId = buildId;
+            this.decoder = decoder ?? throw new ArgumentNullException(nameof(decoder));
+        }
         public static bool Supports(Shader s) => s != null && Allowed.Contains(s.name);
         public static string Property(int i) => "_LAGKey" + i;
-        public static string Injection => @"
-        HLSLINCLUDE
-        #define LIL_REQUIRE_APP_NORMAL
-        #define LIL_REQUIRE_APP_TEXCOORD6
-        #define LIL_REQUIRE_APP_TEXCOORD7
-        #define LIL_CUSTOM_PROPERTIES float _LAGKey0; float _LAGKey1; float _LAGKey2; float _LAGKey3;
-        #define LIL_CUSTOM_VERTEX_OS positionOS.xyz -= input.normalOS * dot(float4(input.uv6, input.uv7), clamp(floor(float4(_LAGKey0, _LAGKey1, _LAGKey2, _LAGKey3) + 0.5), 0.0, 255.0) / 255.0);
-        ENDHLSL
-";
+        public static string Injection => LegacyLinearCodecV1.Decoder.Injection;
         public Shader Copy(Shader source)
         {
             var sourcePath = AssetDatabase.GetAssetPath(source);
@@ -73,11 +71,11 @@ namespace LinuxAvatarGuard
             var properties = Regex.Match(text, "Properties\\s*\\{");
             if (!properties.Success) throw new InvalidOperationException("Shader sin Properties: " + name);
             string declarations = "\n";
-            for (int i = 0; i < 4; i++) declarations += "[HideInInspector] " + Property(i) + " (\"OSC key\", Float) = 0\n";
+            foreach (var property in decoder.RuntimeProperties) declarations += "[HideInInspector] " + property + " (\"OSC key\", Float) = 0\n";
             text = text.Insert(properties.Index + properties.Length, declarations);
             int sub = text.IndexOf("SubShader", StringComparison.Ordinal);
             if (sub < 0) throw new InvalidOperationException("Shader sin SubShader: " + name);
-            text = text.Insert(sub, Injection);
+            text = text.Insert(sub, decoder.Injection);
             // lilToon's inspector can switch a protected material back to an unprotected shader.
             text = Regex.Replace(text, "CustomEditor\\s+\"[^\"]+\"", "CustomEditor \"LinuxAvatarGuard.ProtectedMaterialInspector\"");
             text = Regex.Replace(text, "Fallback\\s+\"[^\"]+\"", "Fallback Off");
