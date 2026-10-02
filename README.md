@@ -30,6 +30,8 @@ Skinning y compatibilidad siguen siendo experimentales. Para Modular Avatar, Ava
 
 Para trabajar desde el código, copia `Package/Assets/LinuxAvatarGuard/` y su archivo `.meta` a `Assets/` en tu proyecto compatible. No copies `Tests/` al proyecto de un usuario final.
 
+El código en `main` incorpora una fundación de seguridad aún sin nueva release: contrato del codec legacy, manifests versionados y recuperación ante fallos de preparación. La [auditoría](docs/SECURITY_ARCHITECTURE_CURRENT.md), el [diseño del codec](docs/POLYMORPHIC_CODEC_DESIGN.md) y el [estado del roadmap](docs/ROADMAP_STATUS.md) describen los resultados y el trabajo pendiente. El codec polimórfico sigue planificado. El [experimento GPU](docs/GPU_CAPTURE_THREAT_MODEL.md) usa RenderDoc exclusivamente sobre contenido sintético propio en Unity.
+
 Pruebas OSC, desde la raíz del repositorio:
 
 ```sh
@@ -37,6 +39,8 @@ python3 -m unittest discover -s Tests -p 'test_osc.py' -v
 ```
 
 Para exportar, usa **Tools > Linux Avatar Guard > Exportar herramienta para distribuir** en Unity y guarda el archivo como `dist/LinuxAvatarGuard-0.2.1.unitypackage`. Después ejecuta `python3 Tests/build_release.py` para crear los ZIP públicos y sus hashes. El exportador excluye dependencias de avatares y claves. Consulta el [informe de validación](dist/booth/RELEASE-VALIDATION.md).
+
+Antes de publicar una release con los cambios de desarrollo, actualiza su versión y verifica el nuevo unitypackage importándolo en un proyecto limpio. Las comprobaciones de esta continuación usan el código fuente copiado; la descarga 0.2.1 conserva sus binarios publicados.
 
 Aceptamos issues y pull requests. Indica versiones de Unity/SDK/lilToon y pasos para reproducir el problema; no adjuntes claves privadas ni avatares de terceros sin permiso.
 
