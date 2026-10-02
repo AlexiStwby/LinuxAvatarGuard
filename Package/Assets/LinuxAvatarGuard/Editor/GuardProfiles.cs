@@ -15,6 +15,7 @@ namespace LinuxAvatarGuard
     public sealed class GuardProfile
     {
         public string buildId, name, prefabPath, scenePath, keyPath, toolsPath;
+        public ProtectionBuildStatus status;
     }
     [Serializable]
     sealed class GuardProfileList
@@ -98,6 +99,12 @@ namespace LinuxAvatarGuard
             list.Add(p);
             WritePrivate(Registry, JsonUtility.ToJson(new GuardProfileList { profiles = list }, true));
         }
+        internal static string RegistrySnapshot() => File.Exists(Registry) ? File.ReadAllText(Registry) : null;
+        internal static void RestoreRegistry(string snapshot)
+        {
+            if (snapshot != null) WritePrivate(Registry, snapshot);
+            else if (File.Exists(Registry)) File.Delete(Registry);
+        }
         public static GuardProfile Register(GuardBuildResult build, string name)
         {
             var key = JsonUtility.FromJson<GuardKeyFile>(File.ReadAllText(build.keyPath));
@@ -107,8 +114,11 @@ namespace LinuxAvatarGuard
             var folder = Path.Combine(DataRoot, key.buildId);
             SecureFolder(folder);
             var p = new GuardProfile { buildId = key.buildId, name = name, prefabPath = build.prefabPath,
-                                       keyPath = Path.Combine(folder, "key.json"), toolsPath = folder };
+                                       keyPath = Path.Combine(folder, "key.json"), toolsPath = folder,
+                                       status = string.IsNullOrEmpty(build.buildId) ? ProtectionBuildStatus.Legacy : ProtectionBuildStatus.Preparing };
             WritePrivate(p.keyPath, JsonUtility.ToJson(key, true));
+            if (!string.IsNullOrEmpty(build.manifestPath))
+                WritePrivate(Path.Combine(folder, "private-manifest.json"), File.ReadAllText(build.manifestPath));
             RefreshTools(p);
             Save(p);
             return p;
@@ -138,6 +148,22 @@ namespace LinuxAvatarGuard
             id ?? "", @"^avtr_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
         public static GuardKeyFile Key(GuardProfile p) =>
             JsonUtility.FromJson<GuardKeyFile>(File.ReadAllText(p.keyPath));
+        public static void RequirePrepared(GuardProfile p)
+        {
+            if (p == null || (p.status != ProtectionBuildStatus.Legacy && p.status != ProtectionBuildStatus.Ready))
+                throw new InvalidOperationException("Preparación incompleta. Genera una copia nueva.");
+            var path = "Assets/LinuxAvatarGuardGenerated/" + p.buildId + "/security-manifest.json";
+            if (File.Exists(path))
+            {
+                var manifest = GuardBuildManifest.Read(path);
+                if (manifest.buildId != p.buildId || manifest.schemaVersion != 1 ||
+                    manifest.codecId != LegacyLinearCodecV1.Id || manifest.codecVersion != LegacyLinearCodecV1.Version ||
+                    manifest.status != ProtectionBuildStatus.Ready.ToString())
+                    throw new InvalidOperationException("Preparación incompleta. Genera una copia nueva.");
+            }
+            else if (p.status != ProtectionBuildStatus.Legacy)
+                throw new InvalidOperationException("Preparación incompleta. Genera una copia nueva.");
+        }
         public static void Link(GuardProfile p, string id)
         {
             if (!ValidAvatarId(id))
@@ -207,6 +233,7 @@ namespace LinuxAvatarGuard
         public static bool Running(GuardProfile p) => OwnedProcess(p, Status(p));
         public static void Start(GuardProfile p)
         {
+            RequirePrepared(p);
             if (!ValidAvatarId(Key(p).avatarId))
                 throw new InvalidOperationException("Primero vincula el avatar publicado.");
             if (Running(p))

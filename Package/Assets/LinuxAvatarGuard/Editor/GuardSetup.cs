@@ -21,20 +21,35 @@ namespace LinuxAvatarGuard
             var d = selected.GetComponentInParent<VRCAvatarDescriptor>();
             return d ? d.gameObject : selected;
         }
-        public static GuardProfile Prepare(GameObject selected, float strength = .1f)
+        public static GuardProfile Prepare(GameObject selected, float strength = .1f) => Prepare(selected, strength, null);
+        // A checkpoint observer also lets integration tests inject failures at completed boundaries.
+        public static GuardProfile Prepare(GameObject selected, float strength, Action<PreparationCheckpoint> checkpoint)
         {
             var source = AvatarRoot(selected);
             if (GuardProfiles.BuildId(source) != null)
                 throw new InvalidOperationException("Esta copia ya está protegida. Selecciona tu avatar de " +
                                                     "trabajo para generar otra versión.");
+            if (Enumerable.Range(0, SceneManager.sceneCount).Select(SceneManager.GetSceneAt)
+                .Any(s => s.isLoaded && string.IsNullOrEmpty(s.path) && !EditorSceneManager.IsPreviewScene(s)))
+                throw new InvalidOperationException("Guarda primero las escenas sin nombre. Los cambios pendientes se conservan.");
+            var snapshot = GuardProfiles.RegistrySnapshot();
+            var dataRoot = GuardProfiles.DataRoot;
             var result = GuardBuilder.Build(
                 source, strength,
                 source && source.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length != 0);
-            var profile = GuardProfiles.Register(result, source.name);
+            var privateFolder = Path.Combine(dataRoot, result.buildId);
+            bool ownsRegistration = false;
+            GuardProfile profile = null;
             Scene scene = default;
             var previous = SceneManager.GetActiveScene();
             try
             {
+                if (Directory.Exists(privateFolder) || GuardProfiles.All().Any(p => p.buildId == result.buildId))
+                    throw new InvalidOperationException("Ya existe un respaldo para este BuildID; se conserva.");
+                ownsRegistration = true;
+                checkpoint?.Invoke(PreparationCheckpoint.AssetsBuilt);
+                profile = GuardProfiles.Register(result, source.name);
+                checkpoint?.Invoke(PreparationCheckpoint.ProfileRegistered);
                 scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive);
                 SceneManager.SetActiveScene(scene);
                 var root = (GameObject)PrefabUtility.InstantiatePrefab(
@@ -61,8 +76,35 @@ namespace LinuxAvatarGuard
                                     "/AvatarGuard-Upload.unity";
                 if (!EditorSceneManager.SaveScene(scene, profile.scenePath))
                     throw new IOException("No se pudo guardar la escena de subida.");
-                GuardProfiles.Save(profile);
+                checkpoint?.Invoke(PreparationCheckpoint.SceneSaved);
+                GuardBuildManifest.Complete(result, profile);
                 return profile;
+            }
+            catch (Exception failure)
+            {
+                // Close the generated scene before deleting its assets. The user's active scene is restored.
+                if (previous.IsValid() && previous.isLoaded) SceneManager.SetActiveScene(previous);
+                if (scene.IsValid() && scene.isLoaded) EditorSceneManager.CloseScene(scene, true);
+                try
+                {
+                    if (ownsRegistration)
+                    {
+                        GuardProfiles.RestoreRegistry(snapshot);
+                        if (Directory.Exists(privateFolder)) Directory.Delete(privateFolder, true);
+                    }
+                    var folder = Path.GetDirectoryName(result.prefabPath).Replace('\\', '/');
+                    if (folder != "Assets/LinuxAvatarGuardGenerated/" + result.buildId)
+                        throw new InvalidOperationException("Ruta de rollback inválida.");
+                    AssetDatabase.DeleteAsset(folder);
+                    if (File.Exists(result.keyPath)) File.Delete(result.keyPath);
+                    var failed = new GuardSecurityManifest { buildId = result.buildId, status = ProtectionBuildStatus.Failed.ToString() };
+                    GuardProfiles.WritePrivate(Path.GetFullPath("UserSettings/LinuxAvatarGuardFailures/" + result.buildId + ".json"), JsonUtility.ToJson(failed, true));
+                }
+                catch (Exception rollbackFailure)
+                {
+                    throw new AggregateException("Falló la preparación y no se pudo completar su rollback.", failure, rollbackFailure);
+                }
+                throw;
             }
             finally
             {
@@ -74,6 +116,7 @@ namespace LinuxAvatarGuard
         }
         public static void OpenScene(GuardProfile p)
         {
+            GuardProfiles.RequirePrepared(p);
             if (string.IsNullOrEmpty(p.scenePath))
                 throw new InvalidOperationException(
                     "Este perfil no tiene una escena preparada; instancia su prefab en tu escena de subida.");
@@ -107,6 +150,9 @@ namespace LinuxAvatarGuard
             var id = GuardProfiles.BuildId(root);
             if (id == null)
                 throw new InvalidOperationException("Selecciona una copia protegida de Linux Avatar Guard.");
+            var generatedManifest = "Assets/LinuxAvatarGuardGenerated/" + id + "/security-manifest.json";
+            if (File.Exists(generatedManifest) && GuardBuildManifest.Read(generatedManifest).status != ProtectionBuildStatus.Ready.ToString())
+                throw new InvalidOperationException("Preparación incompleta. Genera una copia nueva.");
             var key = Path.GetFullPath("Library/LinuxAvatarGuard/" + id + ".json");
             if (!File.Exists(key))
                 key = EditorUtility.OpenFilePanel(GuardText.Text("Seleccionar respaldo privado de esta copia"), "", "json");
@@ -130,6 +176,7 @@ namespace LinuxAvatarGuard
         }
         public static void Preview(GuardProfile p, bool unlocked)
         {
+            GuardProfiles.RequirePrepared(p);
             var root = Object.FindObjectsOfType<VRCAvatarDescriptor>()
                            .FirstOrDefault(d => GuardProfiles.BuildId(d.gameObject) == p.buildId)
                            ?.gameObject;

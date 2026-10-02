@@ -43,6 +43,15 @@ namespace LinuxAvatarGuard
         static readonly Dictionary<string, string[]> Translations = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
             { "Idioma", new[] { "Language", "言語" } },
+            { "Guarda primero las escenas sin nombre. Los cambios pendientes se conservan.", new[] { "Save untitled scenes first. Pending changes are preserved.", "名前のないシーンを先に保存してください。未保存の変更は保持されます。" } },
+            { "Preparación incompleta. Genera una copia nueva.", new[] { "Preparation is incomplete. Prepare a new copy.", "準備が完了していません。新しいコピーを準備してください。" } },
+            { "Ya existe un respaldo para este BuildID; se conserva.", new[] { "A backup already exists for this BuildID; it is preserved.", "このBuildIDのバックアップは既に存在するため、そのまま保持します。" } },
+            { "Falló la preparación y no se pudo completar su rollback.", new[] { "Preparation failed and cleanup could not be completed.", "準備に失敗し、生成物の削除を完了できませんでした。" } },
+            { "BuildID existente; se conservan sus datos.", new[] { "This BuildID already exists; its data is preserved.", "このBuildIDは既に存在するため、そのデータを保持します。" } },
+            { "No se pudo crear la carpeta de generación.", new[] { "Could not create the output folder.", "生成物のフォルダーを作成できませんでした。" } },
+            { "No se pudieron crear las carpetas de assets.", new[] { "Could not create the asset folders.", "アセットのフォルダーを作成できませんでした。" } },
+            { "El plan del codec no corresponde a esta malla.", new[] { "The codec plan does not belong to this mesh.", "このコーデック設定は別のメッシュ用です。" } },
+            { "El manifest no corresponde a esta preparación.", new[] { "The manifest does not belong to this preparation.", "マニフェストはこの準備処理のものではありません。" } },
             { "Preparar · Subir · Activar OSC", new[] { "Prepare · Upload · Start OSC", "準備 · アップロード · OSCを開始" } },
             { "Ofuscación experimental de geometría. Conserva el avatar original. Requiere Linux, Vulkan, lilToon y avatar PC. No protege texturas ni impide capturas GPU.", new[] { "Experimental mesh obfuscation. Preserves the original avatar. Requires Linux, Vulkan, lilToon and a PC avatar. Does not protect textures or prevent GPU capture.", "実験的なメッシュ難読化です。元のアバターは保持されます。Linux、Vulkan、lilToon、PC用アバターが必要です。テクスチャの保護やGPUキャプチャの防止はできません。" } },
             { "1. Preparar una copia", new[] { "1. Prepare a copy", "1. コピーを準備" } },

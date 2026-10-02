@@ -28,6 +28,7 @@ namespace LinuxAvatarGuard
     public sealed class GuardBuildResult
     {
         public string prefabPath, keyPath;
+        public string buildId, manifestPath;
         public int renderers;
     }
     public static class GuardBuilder
@@ -72,8 +73,8 @@ namespace LinuxAvatarGuard
                 foreach (var material in renderer.sharedMaterials)
                     if (!material || !GuardShaders.Supports(material.shader) || ShaderUtil.ShaderHasError(material.shader)) throw new InvalidOperationException("Todos los submeshes deben usar una variante estándar lilToon soportada: " + renderer.name);
                 // Probe all mesh restrictions before allocating output assets.
-                var probe = GuardMesh.Encode(mesh, new[] { 123, 157, 211, 239 }, 0.01f);
-                Object.DestroyImmediate(probe);
+                var codec = MeshCodecs.Legacy;
+                codec.Validate(mesh, codec.Plan(mesh, .01f));
             }
             // Reject mesh replacement, shader-key conflicts and changing normal-dependent geometry.
             foreach (var animator in source.GetComponentsInChildren<Animator>(true))
@@ -115,17 +116,22 @@ namespace LinuxAvatarGuard
             var originalRenderers = Validate(source, experimental);
             string id = Guid.NewGuid().ToString("N");
             string parent = "Assets/LinuxAvatarGuardGenerated";
-            if (!AssetDatabase.IsValidFolder(parent)) AssetDatabase.CreateFolder("Assets", "LinuxAvatarGuardGenerated");
             string folder = parent + "/" + id;
-            AssetDatabase.CreateFolder(parent, id);
-            string assets = folder + "/Assets"; AssetDatabase.CreateFolder(folder, "Assets");
-            string shaderFolder = folder + "/Shaders"; AssetDatabase.CreateFolder(folder, "Shaders");
+            string assets = folder + "/Assets";
+            string shaderFolder = folder + "/Shaders";
             GameObject copy = null;
             GameObject anchor = null;
             Scene scratch = default;
             string keyPath = Path.GetFullPath("Library/LinuxAvatarGuard/" + id + ".json");
+            bool ownsFolder = false, ownsKey = false;
             try
             {
+                if (AssetDatabase.IsValidFolder(folder) || File.Exists(keyPath)) throw new IOException("BuildID existente; se conservan sus datos.");
+                if (!AssetDatabase.IsValidFolder(parent)) AssetDatabase.CreateFolder("Assets", "LinuxAvatarGuardGenerated");
+                if (string.IsNullOrEmpty(AssetDatabase.CreateFolder(parent, id))) throw new IOException("No se pudo crear la carpeta de generación.");
+                ownsFolder = true;
+                if (string.IsNullOrEmpty(AssetDatabase.CreateFolder(folder, "Assets")) ||
+                    string.IsNullOrEmpty(AssetDatabase.CreateFolder(folder, "Shaders"))) throw new IOException("No se pudieron crear las carpetas de assets.");
                 var key = GuardMesh.NewKey();
                 // Instantiate directly into a preview scene; never dirty the user's working scene.
                 scratch = EditorSceneManager.NewPreviewScene();
@@ -135,14 +141,18 @@ namespace LinuxAvatarGuard
                 copy.transform.SetParent(null, true);
                 copy.name = source.name + "_LAG";
                 if (PrefabUtility.IsPartOfPrefabInstance(copy)) PrefabUtility.UnpackPrefabInstance(copy, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                var remapper = new GuardAssets(assets, new GuardShaders(shaderFolder, id));
+                var codec = MeshCodecs.Legacy;
+                var firstRenderer = originalRenderers[0];
+                var firstMesh = firstRenderer is SkinnedMeshRenderer firstSkin ? firstSkin.sharedMesh : firstRenderer.GetComponent<MeshFilter>().sharedMesh;
+                var decoder = codec.EmitDecoder(codec.Plan(firstMesh, strength));
+                var remapper = new GuardAssets(assets, new GuardShaders(shaderFolder, id, decoder));
                 var encoded = new Dictionary<Mesh, Mesh>();
                 foreach (var r in copy.GetComponentsInChildren<Renderer>(true))
                 {
                     var original = r is SkinnedMeshRenderer sk ? sk.sharedMesh : r.GetComponent<MeshFilter>().sharedMesh;
                     if (!encoded.TryGetValue(original, out var mesh))
                     {
-                        mesh = GuardMesh.Encode(original, key, strength);
+                        mesh = codec.Encode(original, codec.Plan(original, strength), key);
                         AssetDatabase.CreateAsset(mesh, AssetDatabase.GenerateUniqueAssetPath(assets + "/mesh.asset"));
                         encoded.Add(original, mesh); remapper.Register(original, mesh);
                     }
@@ -158,6 +168,7 @@ namespace LinuxAvatarGuard
                 if (chmod(Path.GetDirectoryName(keyPath), 448) != 0) throw new IOException("No se pudo asegurar el directorio de claves.");
                 using (var stream = new FileStream(keyPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
+                    ownsKey = true;
                     if (chmod(keyPath, 384) != 0) throw new IOException("No se pudo restringir la clave a su propietario.");
                     using (var writer = new StreamWriter(stream)) writer.Write(JsonUtility.ToJson(new GuardKeyFile { buildId = id, parameters = parameters, keys = key }, true));
                 }
@@ -174,12 +185,19 @@ namespace LinuxAvatarGuard
                 }
                 File.WriteAllText(folder + "/build-report.json", "{\"format\":1,\"buildId\":\"" + id + "\",\"rendererCount\":" + originalRenderers.Count + ",\"experimentalSkinning\":" + experimental.ToString().ToLowerInvariant() + ",\"syncedBits\":32,\"graphics\":\"Vulkan\"}");
                 AssetDatabase.ImportAsset(folder + "/build-report.json");
-                return new GuardBuildResult { prefabPath = prefabPath, keyPath = keyPath, renderers = originalRenderers.Count };
+                var manifestPath = folder + "/security-manifest.json";
+                GuardBuildManifest.Write(manifestPath, new GuardSecurityManifest {
+                    buildId = id, status = ProtectionBuildStatus.AssetsReady.ToString(),
+                    rendererCount = originalRenderers.Count, protectedMeshes = encoded.Count,
+                    protectedTextures = 0, experimentalSkinning = experimental
+                });
+                return new GuardBuildResult { prefabPath = prefabPath, keyPath = keyPath, renderers = originalRenderers.Count,
+                    buildId = id, manifestPath = manifestPath };
             }
             catch
             {
-                AssetDatabase.DeleteAsset(folder);
-                if (File.Exists(keyPath)) File.Delete(keyPath);
+                if (ownsFolder) AssetDatabase.DeleteAsset(folder);
+                if (ownsKey && File.Exists(keyPath)) File.Delete(keyPath);
                 throw;
             }
             finally

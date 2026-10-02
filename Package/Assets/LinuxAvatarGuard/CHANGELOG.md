@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — security foundation
+- Editor-only codec contracts and a typed legacy program; existing decoder, UV7/UV8 and OSC format remain compatible.
+- Versioned public/private build metadata explicitly reports zero protected textures for the legacy codec.
+- Preparation includes backup, profile and scene in its failure handling; failed copies are removed and recorded privately.
+- Incomplete profiles are rejected by scene preview/opening and OSC start; legacy profiles remain supported.
+- Independent compatibility tests, fault injection and controlled RenderDoc Vulkan analysis on synthetic Unity content.
+- This stage does not introduce the polymorphic codec or claim resistance to GPU capture.
+
 ## 0.2.1
 - ES / EN / JP language selector in the wizard, with Spanish as the default.
 - Immediate translation with a persistent Editor preference shared between projects.
