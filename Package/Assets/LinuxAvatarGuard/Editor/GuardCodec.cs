@@ -16,7 +16,11 @@ namespace LinuxAvatarGuard
         DecoderFragment EmitDecoder(CodecPlan plan);
     }
 
-    public enum CodecOperationKind { LegacyNormalOffset = 1 }
+    public enum CodecOperationKind
+    {
+        LegacyNormalOffset = 1, AxisSwap = 2, AxisFlip = 3,
+        TriangularShear = 4, BoundedBend = 5, KeyedVectorOffset = 6
+    }
 
     public sealed class AttributeLayout
     {
@@ -35,13 +39,22 @@ namespace LinuxAvatarGuard
     {
         public string CodecId { get; }
         public int CodecVersion { get; }
-        public int SchemaVersion => 1;
+        public int SchemaVersion { get; }
         public ReadOnlyCollection<CodecOperationKind> Operations { get; }
+        public ReadOnlyCollection<CodecInstruction> Instructions { get; }
         public AttributeLayout Attributes { get; }
         internal CodecProgram(string id, int version, AttributeLayout attributes, params CodecOperationKind[] operations)
         {
-            CodecId = id; CodecVersion = version; Attributes = attributes;
+            CodecId = id; CodecVersion = version; SchemaVersion = 1; Attributes = attributes;
             Operations = Array.AsReadOnly((CodecOperationKind[])operations.Clone());
+            Instructions = Array.AsReadOnly(Array.Empty<CodecInstruction>());
+        }
+        internal CodecProgram(string id, int version, int schema, AttributeLayout attributes, CodecInstruction[] instructions)
+        {
+            CodecId = id; CodecVersion = version; SchemaVersion = schema; Attributes = attributes;
+            var copy = (CodecInstruction[])instructions.Clone();
+            Instructions = Array.AsReadOnly(copy);
+            Operations = Array.AsReadOnly(Array.ConvertAll(copy, instruction => instruction.Kind));
         }
     }
 
@@ -51,8 +64,10 @@ namespace LinuxAvatarGuard
         public float Strength { get; }
         // A plan is tied to its source object. Stable asset/binding identities are a later stage.
         internal Mesh Source { get; }
-        internal CodecPlan(Mesh source, CodecProgram program, float strength)
-        { Source = source; Program = program; Strength = strength; }
+        internal string SourceFingerprint { get; }
+        internal object Owner { get; }
+        internal CodecPlan(Mesh source, CodecProgram program, float strength, string fingerprint = null, object owner = null)
+        { Source = source; Program = program; Strength = strength; SourceFingerprint = fingerprint; Owner = owner; }
     }
 
     public sealed class DecoderFragment
