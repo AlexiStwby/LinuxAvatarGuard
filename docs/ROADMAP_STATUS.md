@@ -55,7 +55,7 @@ El primer arranque tuvo una compilación transitoria sin resolver `GuardText` y 
 
 ## Stage 3 — Codec IR design
 
-**Status:** adaptador y programa legacy tipado implementados y probados. El generador de operaciones del codec nuevo permanece pendiente.
+**Status:** adaptador y programa legacy tipado implementados y probados. El generador polimórfico se implementó después en Stage 4.
 
 **Changes:** [GuardCodec.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardCodec.cs) implementa `IMeshCodec`, `CodecPlan`, `CodecProgram`, `AttributeLayout`, `DecoderFragment` y `LegacyLinearCodecV1`. El builder y el generador de shader pasan por el contrato; se mantienen las APIs anteriores. La validación del mesh puede ejecutarse sin generar una copia aleatoria. [POLYMORPHIC_CODEC_DESIGN.md](POLYMORPHIC_CODEC_DESIGN.md) conserva el diseño de las etapas siguientes.
 
@@ -77,7 +77,7 @@ La API exige Linux Editor, Vulkan y Built-in. Rechaza datos de skinning, todos l
 
 La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correctas, además de sus 13 shaders/bundle. Las seis pruebas OSC siguen correctas. El código fuente compila y el prototipo funciona sin SDK en Vulkan; una ejecución OpenGLCore confirma el rechazo temprano. Captura RenderDoc del prototipo en Unity: dos draws, geometría PostVS corregida y cuatro valores de runtime observables; error máximo frente a proyección original ≈ 1,33 × 10⁻⁷. Detalle en [STATIC_POLYMORPHIC_PROTOTYPE.md](STATIC_POLYMORPHIC_PROTOTYPE.md).
 
-**Known issues:** no integración de avatar/FX/OSC para el prototipo, persistencia de seed de build, derivación por binding, carriers dinámicos, 100 builds completos, revisión final del SDK, benchmark ni matriz animada. La diversidad se mide sobre 16 programas/encodings, no 16 uploads. El intérprete de la prueba reconstruye todos al leer la IR; el polimorfismo no demuestra impedir un extractor adaptativo. La observabilidad PostVS permanece.
+**Known issues:** integración de avatar/FX/OSC, carriers dinámicos, builds completos procesados por SDK, benchmark y matriz animada pendientes. La persistencia/derivación por binding se incorporó en Stage 5; la evaluación estática de 100 fixtures se registra en Stage 6. La diversidad se mide sobre 16 programas/encodings, no 16 uploads. El intérprete de la prueba reconstruye todos al leer la IR; el polimorfismo no demuestra impedir un extractor adaptativo. La observabilidad PostVS permanece.
 
 **Next stage:** Stage 5, identidad estable y derivación por binding/mesh con vectores verificables y metadata privada versionada. Mantener el prototipo fuera de la ruta predeterminada hasta resolver integración contextual y skinning.
 
@@ -87,11 +87,23 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Changes:** identidad por GUID/localFileID/contenido/jerarquía/componente, HKDF-SHA256 con dominios de programa/payload por binding y contexto privado versionado. La persistencia Linux usa 0700/0600, descriptores sin seguir symlinks, publicación atómica sin sobrescritura y validación de dueño/tipo/links/permisos. [PER_MESH_DERIVATION.md](PER_MESH_DERIVATION.md) detalla contratos y límites.
 
-**Tests:** 50 comprobaciones correctas: vectores RFC 5869 A.1/A.2/A.3, dominios, identidades, mutaciones, reproducción exacta desde disco e IO adversarial. Las 44 pruebas de Stage 4 siguen correctas. Solo fixtures propias en Unity Vulkan; ningún análisis de VRChat.
+**Tests:** 53 comprobaciones correctas: vectores RFC 5869 A.1/A.2/A.3, dominios, identidades, mutaciones, reproducción exacta desde disco e IO adversarial. Las 44 pruebas de Stage 4 siguen correctas. Solo fixtures propias en Unity Vulkan; ningún análisis de VRChat.
 
 **Known issues:** cuatro valores de runtime compartidos/observables; no secretos independientes por renderer en OSC. Identidad estática, dependiente de fuente/meta/jerarquía conservadas. Cadenas privadas no tienen borrado garantizado; no sandbox contra el mismo usuario. No integración productiva/FX/SDK ni skinning.
 
 **Next stage:** Stage 6, diversidad de 100 builds sintéticos completos y extractor adaptativo. El gate de avatares procesados por SDK continúa pendiente.
+
+## Stage 6 — Codec diversity tests
+
+**Status:** completado para 100 builds completos de fixture estática; 100 avatares procesados por SDK y matriz animada pendientes.
+
+**Changes:** dos bindings por build, shaders/materiales/prefab/manifest y contexto privado separados; empaquetado explícito de providers UsePass; reapertura nativa y extractor HLSL independiente. La prueba detectó una cancelación de offsets que eliminaba la dependencia de clave. Plan/Validate/Emit ahora la rechazan y Encode cancela si el RMS sin clave no supera 10⁻⁵ antes de crear la Mesh. El caso rechazado se conserva como regresión/evidencia.
+
+**Tests:** 2.714 comprobaciones correctas. 100 bundles Linux reabiertos, cuatro muestras Windows64, 200 programas/decoder bodies/constantes/meshes únicos, 197 secuencias y un layout fijo. 99 ataques cross-build y 100 cross-mesh fallan sin adaptación. El extractor adaptativo recupera 200/200, error máximo ≈ 1,79 × 10⁻⁷. Doce vistas de cuatro bundles: diferencia desbloqueada máxima ≈ 7,98 × 10⁻⁸; diferencia bloqueada mínima ≈ 0,05342. Las 53 + 44 + 83 comprobaciones de contexto/prototipo/legacy pasan; ejecución final limpia, salida 0. [CODEC_DIVERSITY_RESULTS.md](CODEC_DIVERSITY_RESULTS.md) detalla evidencia, alcance, variantes y tiempos.
+
+**Known issues:** no resistencia demostrada a extractor adaptativo ni PostVS; claves observables y compartidas. El extractor usa HLSL fuente y valores de fixture proporcionados; no decompila el bytecode del bundle ni recupera claves desconocidas. Subconjunto de variantes unlit/mono; no certifica iluminación/stereo/animaciones/runtime ni resultado final del SDK. Tiempo con cache y generación original no medida; no benchmark.
+
+**Next stage:** [Stage 7 — asignación conservadora](DYNAMIC_ATTRIBUTE_RESEARCH.md). Investigación de consumidores lilToon entregada; allocator todavía pendiente, antes de materiales/clips/contexto productivos.
 
 ## Fundación de validación y ciclo de vida
 
@@ -146,9 +158,9 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 2 | Current behavior tests | Baseline ejecutada; bundle, cliente, poses y fallos pendientes. |
 | 3 | Codec IR | Contratos y adaptador legacy implementados; 18 comprobaciones. |
 | 4 | Polymorphic prototype | Implementado como API estática opt-in; 44 comprobaciones y captura GPU en Unity. |
-| 5 | Per-mesh derivation | Implementado para estático; 50 comprobaciones y contexto privado reproducible. |
-| 6 | Diversity tests | Planificado; 100 builds completos y extractor adaptativo. |
-| 7 | Dynamic attributes | Planificado; matriz positiva de carriers/features. |
+| 5 | Per-mesh derivation | Implementado para estático; 53 comprobaciones y contexto privado reproducible. |
+| 6 | Diversity tests | 100 builds estáticos completos + extractor; 2.714 comprobaciones; SDK/animación pendientes. |
+| 7 | Dynamic attributes | Investigación lilToon/criterios entregados; allocator y matriz positiva pendientes. |
 | 8 | ShaderForge integration | Planificado; remapeo contextual, pases y variantes lilToon. |
 | 9 | Performance benchmark | Pendiente; medir original/legacy/nuevo y fijar presupuestos. |
 | 10 | TextureGuard research | Pendiente; entregar investigación de sampling/import/mipmaps. |
@@ -177,7 +189,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 5. `feat(meshguard): add static polymorphic prototype`: experimento opt-in, fuera de la ruta predeterminada; no extenderlo automáticamente a Carukia.
 6. `test(meshguard): measure diversity and adaptive decoding`: 100 builds, error geométrico, ataques propios y métricas de coste.
 
-Los puntos 1 y la fundación del 2 están implementados; el análisis inicial del punto 4 se realizó para ambos codecs, y el prototipo estático del punto 5 se implementó como API opt-in. Los puntos 3 y 6 siguen pendientes. Cada cambio debe dejar pruebas anteriores correctas y un estado de etapa actualizado. La implementación completa de otras capas se mantiene separada.
+Los puntos 1 y la fundación del 2 están implementados; el análisis inicial del punto 4 se realizó para ambos codecs, y el prototipo estático del punto 5 se implementó como API opt-in. El punto 6 se implementó sobre fixtures estáticas propias; el punto 3 y la validación con avatares procesados por SDK siguen pendientes. Cada cambio debe dejar pruebas anteriores correctas y un estado de etapa actualizado. La implementación completa de otras capas se mantiene separada.
 
 La continuación se valida con `LAGImplementationValidation.Run`: codec, funcionales, baseline adversarial, preparación y shaders/bundle Windows64. También se comprueba compilación del código fuente sin SDK y la localización ES/EN/JP. Los nuevos binarios se prepararán en una release posterior; no se afirma importar un unitypackage nuevo cuando se ha probado código copiado.
 

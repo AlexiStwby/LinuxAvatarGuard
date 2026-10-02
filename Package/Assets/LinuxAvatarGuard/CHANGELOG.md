@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased — security foundation
+- 100 complete static synthetic prefab/bundle builds, explicit UsePass providers, real Vulkan bundle replay and adaptive HLSL extraction tests.
+- Reject adjacent opposite keyed offsets and encoding with keyless reconstruction inside the error budget; preserve the discovered case as an adversarial regression.
+- Context codecs enforce their derived runtime values; private reads reject missing schema and invalid seed sizes.
 - Binding-aware HKDF-SHA256 derivation, stable static asset/renderer identity and a reproducible versioned private build context.
 - Linux private-context persistence with 0700/0600, descriptor-based no-follow IO, create-only atomic publication and strict restore validation; RFC and adversarial IO tests.
 - Research opt-in static polymorphic prototype with eight typed reversible instructions, bounded nonlinear bends and three-axis keyed offsets; the avatar wizard still uses legacy.
