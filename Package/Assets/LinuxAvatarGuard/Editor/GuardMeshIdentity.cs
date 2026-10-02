@@ -22,6 +22,8 @@ namespace LinuxAvatarGuard
         readonly Renderer renderer;
         readonly Mesh source;
         internal Mesh Source => source;
+        internal GameObject Root => root;
+        internal Renderer Renderer => renderer;
         MeshBindingIdentity(GameObject root, Renderer renderer, Mesh source, string guid, long fileId, string content, string id)
         {
             this.root = root; this.renderer = renderer; this.source = source;
@@ -32,7 +34,7 @@ namespace LinuxAvatarGuard
             if (!root || !renderer || (renderer.transform != root.transform && !renderer.transform.IsChildOf(root.transform)))
                 throw new ArgumentException("El renderer debe pertenecer a la raíz de trabajo.");
             var mesh = StaticPolymorphicCodecV1.RequireStaticRenderer(renderer);
-            StaticPolymorphicCodecV1.ValidateSource(mesh, .1f);
+            StaticPolymorphicCodecV1.ValidateSource(mesh, .1f, false);
             if (!AssetDatabase.Contains(mesh) || !AssetDatabase.TryGetGUIDAndLocalFileIdentifier(mesh, out string guid, out long fileId) ||
                 !MeshKeyDerivation.IsHex(guid, 32) || fileId == 0)
                 throw new InvalidOperationException("Guarda la malla fuente como asset antes de capturar su identidad estable.");

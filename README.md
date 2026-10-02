@@ -34,7 +34,7 @@ El código en `main` incorpora una fundación de seguridad aún sin nueva releas
 
 La [derivación por malla/binding](docs/PER_MESH_DERIVATION.md) separa programas y payloads y conserva el contexto de reproducción en archivos privados fuera de Unity/Git. Los valores de runtime siguen compartidos y observables.
 
-La [evaluación de 100 builds sintéticos](docs/CODEC_DIVERSITY_RESULTS.md) mide diversidad, reapertura de bundles, renders y extracción adaptativa. Detectó y corrigió la aceptación de un programa sin dependencia de clave. La [investigación de carriers](docs/DYNAMIC_ATTRIBUTE_RESEARCH.md) prepara la etapa siguiente. Estos cambios todavía no habilitan el codec nuevo en el asistente.
+La [evaluación de 100 builds sintéticos](docs/CODEC_DIVERSITY_RESULTS.md) mide diversidad, reapertura de bundles, renders y extracción adaptativa. Detectó y corrigió la aceptación de un programa sin dependencia de clave. La [asignación dinámica de atributos](docs/DYNAMIC_ATTRIBUTE_ALLOCATION.md) elige dos UV demostrablemente libres entre los índices 4–7, con contrato lilToon revisado, validación de mutaciones y respaldos compatibles. Las pruebas cubren doce layouts y seis pares en bundles Vulkan; el extractor adaptativo sigue reconstruyendo la geometría. Estos cambios todavía no habilitan el codec nuevo en el asistente.
 
 Pruebas OSC, desde la raíz del repositorio:
 

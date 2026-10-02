@@ -28,10 +28,11 @@ namespace LinuxAvatarGuard
         public int SecondUvChannel { get; }
         public int ComponentsPerChannel { get; }
         public bool RequiresUnitNormals { get; }
-        internal AttributeLayout(int first, int second, int components, bool normals)
+        public int PolicyVersion { get; }
+        internal AttributeLayout(int first, int second, int components, bool normals, int policyVersion = 0)
         {
             FirstUvChannel = first; SecondUvChannel = second;
-            ComponentsPerChannel = components; RequiresUnitNormals = normals;
+            ComponentsPerChannel = components; RequiresUnitNormals = normals; PolicyVersion = policyVersion;
         }
     }
 
@@ -63,12 +64,13 @@ namespace LinuxAvatarGuard
         public CodecProgram Program { get; }
         public float Strength { get; }
         public string BindingStableId { get; }
+        public string AttributeUsageHash { get; }
         // Legacy/standalone plans leave BindingStableId null. Context-created plans also validate the captured binding.
         internal Mesh Source { get; }
         internal string SourceFingerprint { get; }
         internal object Owner { get; }
-        internal CodecPlan(Mesh source, CodecProgram program, float strength, string fingerprint = null, object owner = null, string bindingId = null)
-        { Source = source; Program = program; Strength = strength; SourceFingerprint = fingerprint; Owner = owner; BindingStableId = bindingId; }
+        internal CodecPlan(Mesh source, CodecProgram program, float strength, string fingerprint = null, object owner = null, string bindingId = null, string attributeUsageHash = null)
+        { Source = source; Program = program; Strength = strength; SourceFingerprint = fingerprint; Owner = owner; BindingStableId = bindingId; AttributeUsageHash = attributeUsageHash; }
     }
 
     public sealed class DecoderFragment

@@ -158,10 +158,11 @@ public static class LAGBindingValidation
                 // Store adversarial checks are restricted to known public fixture seed/context in the temp XDG directory.
                 foreach(var field in new[]{"schemaVersion","derivationVersion","codecVersion","bindingSchema"})
                 {
-                    File.WriteAllText(savedPath,text.Replace("\""+field+"\": 1","\""+field+"\": 99"));
+                    int version=field=="schemaVersion" ? GuardBuildContext.SchemaVersion : 1;
+                    File.WriteAllText(savedPath,text.Replace("\""+field+"\": "+version,"\""+field+"\": 99"));
                     Check(Rejects(() => GuardBuildContext.LoadPrivate(PublicBuildId)), "private restore rejects incompatible "+field);
                 }
-                File.WriteAllText(savedPath,text.Replace("\"schemaVersion\": 1,",""));
+                File.WriteAllText(savedPath,text.Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion+",",""));
                 Check(Rejects(() => GuardBuildContext.LoadPrivate(PublicBuildId)), "private metadata with a missing schema fails closed");
                 File.WriteAllText(savedPath,text.Replace(Convert.ToBase64String(PublicSeed),Convert.ToBase64String(new byte[31])));
                 Check(Rejects(() => GuardBuildContext.LoadPrivate(PublicBuildId)), "private metadata rejects an incorrectly sized master seed");

@@ -16,6 +16,7 @@
 !/docs/STATIC_POLYMORPHIC_PROTOTYPE.md
 !/docs/PER_MESH_DERIVATION.md
 !/docs/DYNAMIC_ATTRIBUTE_RESEARCH.md
+!/docs/DYNAMIC_ATTRIBUTE_ALLOCATION.md
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -42,6 +43,7 @@
 !/Tests/LAGAdaptiveShaderDecoder.cs
 !/Tests/LAGDiversityValidation.cs
 !/Tests/LAGDiversityVariantFilter.cs
+!/Tests/LAGAttributeValidation.cs
 
 /dist/*
 !/dist/booth/

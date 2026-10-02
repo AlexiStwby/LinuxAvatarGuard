@@ -6,7 +6,7 @@ using System.Text;
 
 namespace LinuxAvatarGuard
 {
-    public enum MeshDerivationPurpose { Program = 1, Payload = 2 }
+    public enum MeshDerivationPurpose { Program = 1, Payload = 2, AttributeLayout = 4 }
 
     public static class MeshKeyDerivation
     {

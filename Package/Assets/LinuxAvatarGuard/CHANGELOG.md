@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased — security foundation
+- Research-only dynamic UV allocation with a pinned lilToon 2.3.4/Built-in shader contract, occupied/consumer reservations and material/source mutation checks.
+- Reject unreviewed vertex streams/static batching and preserve object-space decoding through a prototype-only DisableBatching shader tag.
+- Separate HKDF layout purpose, dynamic IR schema 3 and private schema 2 with explicit fixed-layout schema 1 replay; avatar preparation remains legacy.
+- Occupied UV/ID Mask/context matrix, twelve ordered layouts, six native Vulkan bundle pairs and independent adaptive extraction checks.
 - 100 complete static synthetic prefab/bundle builds, explicit UsePass providers, real Vulkan bundle replay and adaptive HLSL extraction tests.
 - Reject adjacent opposite keyed offsets and encoding with keyless reconstruction inside the error budget; preserve the discovered case as an adversarial regression.
 - Context codecs enforce their derived runtime values; private reads reject missing schema and invalid seed sizes.

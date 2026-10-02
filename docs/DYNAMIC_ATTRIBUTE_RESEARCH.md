@@ -1,6 +1,6 @@
 # Preparación de Stage 7 — asignación de atributos
 
-Fecha: 2026-10-02. Investigación sobre fuentes locales de lilToon 2.3.4, Unity 2022.3.22f1 y Built-in. El allocator dinámico aún no está implementado; el prototipo conserva UV7/UV8 (índices Unity 6/7).
+Fecha: 2026-10-02. Investigación previa a Stage 7 sobre fuentes locales de lilToon 2.3.4, Unity 2022.3.22f1 y Built-in. Al realizar este análisis el prototipo conservaba UV7/UV8 (índices Unity 6/7). La implementación posterior, pruebas y límites se documentan en [DYNAMIC_ATTRIBUTE_ALLOCATION.md](DYNAMIC_ATTRIBUTE_ALLOCATION.md).
 
 ## Hallazgos que condicionan la implementación
 

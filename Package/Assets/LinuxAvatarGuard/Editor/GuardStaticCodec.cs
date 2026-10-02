@@ -21,14 +21,18 @@ namespace LinuxAvatarGuard
         readonly MeshBindingIdentity binding;
         readonly float? recordedStrength;
         readonly int[] expectedRuntimeKey;
+        readonly AttributeLayout attributes;
+        readonly AttributeUsageAnalysis attributeUsage;
         bool disposed;
         public StaticPolymorphicCodecV1(byte[] seed) : this(seed, seed, null) { }
-        internal StaticPolymorphicCodecV1(byte[] programSeed, byte[] payloadSeed, MeshBindingIdentity binding, float? recordedStrength = null, int[] expectedRuntimeKey = null)
+        internal StaticPolymorphicCodecV1(byte[] programSeed, byte[] payloadSeed, MeshBindingIdentity binding, float? recordedStrength = null, int[] expectedRuntimeKey = null,
+            AttributeLayout attributes = null, AttributeUsageAnalysis attributeUsage = null)
         {
             if (programSeed == null || programSeed.Length != 32 || payloadSeed == null || payloadSeed.Length != 32)
                 throw new ArgumentException("Seed del prototipo inválido: se requieren 32 bytes.");
             this.programSeed = (byte[])programSeed.Clone(); this.payloadSeed = (byte[])payloadSeed.Clone(); this.binding = binding; this.recordedStrength = recordedStrength;
             this.expectedRuntimeKey = expectedRuntimeKey == null ? null : (int[])expectedRuntimeKey.Clone();
+            this.attributes = attributes ?? new AttributeLayout(6, 7, 2, false); this.attributeUsage = attributeUsage;
         }
         public static StaticPolymorphicCodecV1 CreateRandom()
         {
@@ -51,7 +55,8 @@ namespace LinuxAvatarGuard
         public CodecPlan Plan(Mesh source, float strength)
         {
             RequireAlive();
-            ValidateSource(source, strength);
+            ValidateSource(source, strength, attributeUsage == null);
+            ValidateAttributes(source);
             if (recordedStrength.HasValue && strength != recordedStrength.Value) throw new ArgumentException("La intensidad no coincide con el plan privado registrado.");
             if (binding != null) { binding.Validate(); if (binding.Source != source) throw new ArgumentException("La fuente no pertenece al binding."); }
             using (var random = new SeedStream(programSeed, "LAG/static-prototype/v1/program"))
@@ -81,12 +86,12 @@ namespace LinuxAvatarGuard
                 for (int i = instructions.Count - 1; i > 0; i--)
                 { int j = random.Next(i + 1); var t = instructions[i]; instructions[i] = instructions[j]; instructions[j] = t; }
                 ValidateKeyDependence(instructions);
-                return new CodecPlan(source, new CodecProgram(Id, Version, 2, new AttributeLayout(6, 7, 2, false), instructions.ToArray()),
-                    strength, MeshBindingIdentity.ContentFingerprint(source), this, binding?.StableId);
+                return new CodecPlan(source, new CodecProgram(Id, Version, attributeUsage == null ? 2 : 3, attributes, instructions.ToArray()),
+                    strength, MeshBindingIdentity.ContentFingerprint(source), this, binding?.StableId, attributeUsage?.Fingerprint);
             }
         }
         static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        internal static void ValidateSource(Mesh source, float strength)
+        internal static void ValidateSource(Mesh source, float strength, bool fixedCarriers = true)
         {
             if (!source || !source.isReadable) throw new InvalidOperationException("La malla debe ser legible. No se cambia su importador automáticamente.");
             if (!Finite(strength) || strength <= 0 || strength > .5f) throw new ArgumentException("Intensidad fuera de rango (0, 0.5].");
@@ -97,7 +102,8 @@ namespace LinuxAvatarGuard
             for (int channel = 0; channel < 8; channel++)
             {
                 source.GetUVs(channel, uv);
-                if (channel >= 6 && uv.Count != 0) throw new InvalidOperationException(channel == 6 ? "UV7 ocupado: se conserva el original y se cancela." : "UV8 ocupado: se conserva el original y se cancela.");
+                if (fixedCarriers && channel >= 6 && source.HasVertexAttribute((VertexAttribute)((int)VertexAttribute.TexCoord0 + channel)))
+                    throw new InvalidOperationException(channel == 6 ? "UV7 ocupado: se conserva el original y se cancela." : "UV8 ocupado: se conserva el original y se cancela.");
                 foreach (var value in uv) for (int j = 0; j < 4; j++) if (!Finite(value[j])) throw new InvalidOperationException("La malla contiene datos no finitos o supera el rango admitido por el prototipo.");
             }
             foreach (var value in source.vertices) for (int j = 0; j < 3; j++)
@@ -116,11 +122,19 @@ namespace LinuxAvatarGuard
             RequireAlive();
             if (plan == null || plan.Owner != this || !plan.Source || plan.Source != source || plan.Program.CodecId != Id)
                 throw new ArgumentException("El plan no pertenece a este codec experimental.");
-            ValidateSource(source, plan.Strength);
+            ValidateSource(source, plan.Strength, attributeUsage == null);
+            ValidateAttributes(source);
             if (MeshBindingIdentity.ContentFingerprint(source) != plan.SourceFingerprint) throw new InvalidOperationException("La malla cambió después de crear el plan.");
             if (binding != null) binding.Validate();
             foreach (var instruction in plan.Program.Instructions) instruction.Validate();
             ValidateKeyDependence(plan.Program.Instructions);
+        }
+        void ValidateAttributes(Mesh source)
+        {
+            attributeUsage?.Validate();
+            foreach (var channel in new[] { attributes.FirstUvChannel, attributes.SecondUvChannel })
+                if (source.HasVertexAttribute((VertexAttribute)((int)VertexAttribute.TexCoord0 + channel)))
+                    throw new InvalidOperationException("El carrier UV " + channel + " está ocupado: se cancela sin modificar la fuente.");
         }
         static void ValidateKeyDependence(IList<CodecInstruction> instructions)
         {
@@ -166,7 +180,7 @@ namespace LinuxAvatarGuard
             try
             {
                 result.name = source.name + "_LAG_StaticPrototype"; result.vertices = positions;
-                result.SetUVs(6, first); result.SetUVs(7, second); result.bounds = source.bounds;
+                result.SetUVs(attributes.FirstUvChannel, first); result.SetUVs(attributes.SecondUvChannel, second); result.bounds = source.bounds;
                 return result;
             }
             catch { UnityEngine.Object.DestroyImmediate(result); throw; }
@@ -174,11 +188,11 @@ namespace LinuxAvatarGuard
         public DecoderFragment EmitDecoder(CodecPlan plan)
         {
             CheckPlan(plan?.Source, plan);
-            var output = new StringBuilder("\nHLSLINCLUDE\n#define LIL_REQUIRE_APP_TEXCOORD6\n#define LIL_REQUIRE_APP_TEXCOORD7\n");
+            var output = new StringBuilder("\nHLSLINCLUDE\n#define LIL_REQUIRE_APP_TEXCOORD" + attributes.FirstUvChannel + "\n#define LIL_REQUIRE_APP_TEXCOORD" + attributes.SecondUvChannel + "\n");
             output.Append("#define LIL_CUSTOM_PROPERTIES float _LAGKey0; float _LAGKey1; float _LAGKey2; float _LAGKey3;\n");
             output.Append("float3 LAGStaticDecode(float3 p, float4 c, float4 k) {\nk=clamp(floor(k+0.5),0.0,255.0)/255.0;\n");
             foreach (var instruction in plan.Program.Instructions.Reverse()) instruction.EmitInverse(output);
-            output.Append("return p; }\n#define LIL_CUSTOM_VERTEX_OS positionOS.xyz = LAGStaticDecode(positionOS.xyz,float4(input.uv6,input.uv7),float4(_LAGKey0,_LAGKey1,_LAGKey2,_LAGKey3));\nENDHLSL\n");
+            output.Append("return p; }\n#define LIL_CUSTOM_VERTEX_OS positionOS.xyz = LAGStaticDecode(positionOS.xyz,float4(input.uv" + attributes.FirstUvChannel + ",input.uv" + attributes.SecondUvChannel + "),float4(_LAGKey0,_LAGKey1,_LAGKey2,_LAGKey3));\nENDHLSL\n");
             return new DecoderFragment(Id, Version, output.ToString(), "_LAGKey0", "_LAGKey1", "_LAGKey2", "_LAGKey3");
         }
         public static string ProgramHash(CodecPlan plan)
@@ -190,6 +204,8 @@ namespace LinuxAvatarGuard
                 {
                     output.Write(Id); output.Write(Version); output.Write(plan.Program.SchemaVersion);
                     output.Write(plan.Program.Attributes.FirstUvChannel); output.Write(plan.Program.Attributes.SecondUvChannel);
+                    if (plan.Program.SchemaVersion >= 3)
+                    { output.Write(plan.Program.Attributes.ComponentsPerChannel); output.Write(plan.Program.Attributes.PolicyVersion); output.Write(plan.AttributeUsageHash); }
                     output.Write(plan.Program.Instructions.Count);
                     foreach (var instruction in plan.Program.Instructions) instruction.WriteCanonical(output);
                 }

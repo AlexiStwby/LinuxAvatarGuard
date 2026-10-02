@@ -6,7 +6,7 @@ Fecha: 2026-10-02. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `Li
 
 El roadmap identifica correctamente la necesidad de diversidad, validación y trazabilidad. El codec actual puede ser reconstruido con una fórmula estable si se conocen sus cuatro parámetros. La baseline añadida reproduce esa debilidad; no constituye una nueva protección.
 
-La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. TextureGuard, fingerprints e integración productiva del codec nuevo siguen pendientes.
+La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos para fixtures estáticas. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. TextureGuard, fingerprints e integración productiva del codec nuevo siguen pendientes.
 
 El análisis GPU se limita a Unity y aplicaciones de prueba propias por instrucción del usuario. RenderDoc se descargó con su permiso; no se realiza análisis GPU sobre VRChat.
 
@@ -103,7 +103,19 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Known issues:** no resistencia demostrada a extractor adaptativo ni PostVS; claves observables y compartidas. El extractor usa HLSL fuente y valores de fixture proporcionados; no decompila el bytecode del bundle ni recupera claves desconocidas. Subconjunto de variantes unlit/mono; no certifica iluminación/stereo/animaciones/runtime ni resultado final del SDK. Tiempo con cache y generación original no medida; no benchmark.
 
-**Next stage:** [Stage 7 — asignación conservadora](DYNAMIC_ATTRIBUTE_RESEARCH.md). Investigación de consumidores lilToon entregada; allocator todavía pendiente, antes de materiales/clips/contexto productivos.
+**Next stage:** [Stage 7 — asignación conservadora](DYNAMIC_ATTRIBUTE_ALLOCATION.md), entregada a continuación para fixtures estáticas. Materiales/clips/contexto productivos siguen pendientes.
+
+## Stage 7 — Dynamic Attribute Allocation
+
+**Status:** completado para el contrato estático revisado; integración de avatares/animación pendiente.
+
+**Changes:** allocator de dos carriers Float32 × 2 entre UV de índice 4–7, reservas por atributos existentes e ID Mask en todos los materiales/submeshes, contrato positivo de Unity/lilToon/fuentes/keywords y validación de mutaciones. Se rechazan animación/scripts, MPB, vertex streams adicionales/enlighten y static batching; el shader del prototipo desactiva dynamic batching. Propósito HKDF separado, IR schema 3 y respaldo privado schema 2, con reproducción fija explícita de schema 1. Factory por ruta de asset; asistente y codec legacy conservados. [DYNAMIC_ATTRIBUTE_ALLOCATION.md](DYNAMIC_ATTRIBUTE_ALLOCATION.md) detalla API, versiones y límites.
+
+**Tests:** 683 comprobaciones correctas. Matriz de 16 ocupaciones × 3 dimensiones, consumidores ID Mask 0–8, mutaciones, contextos desconocidos y persistencia adversarial. 100 contextos admitidos producen 12 layouts ordenados; un candidato sin dependencia de clave se rechaza aparte. Seis bundles Linux con los seis pares y 10 variantes, 78 shaders/provider assets cargados con soporte Vulkan. 54 imágenes/18 vistas: diferencia desbloqueada máxima 0, bloqueada mínima ≈ 0,00834097. Extractor adaptativo recupera cada par, error máximo ≈ 1,2288 × 10⁻⁷. Regresión de 53 + 44 + 83 comprobaciones y compilación/reproducción privada sin SDK ni lilToon correctas.
+
+**Known issues:** lectura del shader y valores runtime proporcionados permiten reconstrucción adaptativa; PostVS sigue observable. Contrato fijado a Unity 2022.3.22f1/lilToon 2.3.4/Built-in/Linux/Vulkan, sin skinning, clips ni shaders custom. Renders unlit/mono, filtro de variantes solo de fixture, no certificación de todos los pases/lighting/stereo ni resultado final del SDK. Colores, tangentes, lookup y protección de texturas pendientes.
+
+**Next stage:** Stage 8, Generated Shader Forge contextual por renderer/material slot/clips, cambios de material y propiedades animadas, providers/configuración y gates verificables antes de integración productiva.
 
 ## Fundación de validación y ciclo de vida
 

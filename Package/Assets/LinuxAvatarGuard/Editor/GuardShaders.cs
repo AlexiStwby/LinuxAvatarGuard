@@ -20,6 +20,7 @@ namespace LinuxAvatarGuard
         readonly string folder, buildId;
         readonly DecoderFragment decoder;
         readonly Dictionary<string, string> generated = new Dictionary<string, string>();
+        readonly Dictionary<string, string> generatedPaths = new Dictionary<string, string>();
         public GuardShaders(string folder, string buildId) : this(folder, buildId, LegacyLinearCodecV1.Decoder) { }
         public GuardShaders(string folder, string buildId, DecoderFragment decoder)
         {
@@ -39,7 +40,8 @@ namespace LinuxAvatarGuard
             if (!Supports(source)) throw new InvalidOperationException("Variante lilToon no soportada: " + (source ? source.name : "null"));
             var name = Generate(source.name);
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            var shader = Shader.Find(name);
+            // A deleted/imported shader or a previously loaded bundle can retain the same global name.
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(generatedPaths[source.name]);
             if (!shader || ShaderUtil.ShaderHasError(shader)) throw new InvalidOperationException("Falló la variante de shader: " + name);
             return shader;
         }
@@ -79,7 +81,14 @@ namespace LinuxAvatarGuard
             // lilToon's inspector can switch a protected material back to an unprotected shader.
             text = Regex.Replace(text, "CustomEditor\\s+\"[^\"]+\"", "CustomEditor \"LinuxAvatarGuard.ProtectedMaterialInspector\"");
             text = Regex.Replace(text, "Fallback\\s+\"[^\"]+\"", "Fallback Off");
+            if (decoder.CodecId == StaticPolymorphicCodecV1.Id)
+            {
+                // The nonlinear decoder requires positions in each object's original coordinate system.
+                text = Regex.Replace(text, @"Tags\s*\{([^}]*)\}", match =>
+                    match.Groups[1].Value.Contains("\"RenderType\"") ? "Tags {" + match.Groups[1].Value + " \"DisableBatching\" = \"True\" }" : match.Value);
+            }
             string output = folder + "/shader_" + shaderIndex + ".shader";
+            generatedPaths.Add(name, output);
             File.WriteAllText(output, text);
             AssetDatabase.ImportAsset(output, ImportAssetOptions.ForceSynchronousImport);
             return targetName;

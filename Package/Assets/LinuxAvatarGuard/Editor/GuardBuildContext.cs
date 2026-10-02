@@ -11,7 +11,7 @@ namespace LinuxAvatarGuard
     // Research context, not a GuardProfile and never an avatar upload readiness certificate.
     public sealed class GuardBuildContext : IDisposable
     {
-        public const int SchemaVersion = 1;
+        public const int SchemaVersion = 2;
         public string BuildId { get; }
         public string CreatedUtc { get; }
         readonly byte[] masterSeed;
@@ -37,21 +37,36 @@ namespace LinuxAvatarGuard
         public static GuardBuildContext CreateReproducible(string buildId, byte[] masterSeed) =>
             new GuardBuildContext(buildId, masterSeed, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), false);
         void Alive() { if (disposed) throw new ObjectDisposedException(nameof(GuardBuildContext)); }
-        public StaticPolymorphicCodecV1 CreateCodec(MeshBindingIdentity binding)
+        // Recorded schema 2 bindings reproduce their allocation; new bindings retain the fixed route by default.
+        public StaticPolymorphicCodecV1 CreateCodec(MeshBindingIdentity binding) => CreateCodecCore(binding, false);
+        public StaticPolymorphicCodecV1 CreateDynamicCodec(MeshBindingIdentity binding) => CreateCodecCore(binding, true);
+        StaticPolymorphicCodecV1 CreateCodecCore(MeshBindingIdentity binding, bool dynamicAttributes)
         {
             Alive(); if (binding == null) throw new ArgumentNullException(nameof(binding)); binding.Validate();
             if (restored && !bindings.ContainsKey(binding.StableId)) throw new InvalidOperationException("El binding no pertenece al contexto privado restaurado.");
             if (bindings.TryGetValue(binding.StableId, out var record) &&
                 (record.sourceGuid != binding.SourceGuid || record.localFileId != binding.SourceLocalFileId || record.contentHash != binding.ContentHash))
                 throw new InvalidOperationException("La metadata privada no corresponde a la fuente.");
-            byte[] program = null, payload = null;
+            if (record != null && dynamicAttributes && record.attributePolicy == 0)
+                throw new InvalidOperationException("Un binding privado fijo no puede reinterpretarse como dinámico.");
+            dynamicAttributes |= record != null && record.attributePolicy != 0;
+            byte[] program = null, payload = null, layoutSeed = null;
             int[] runtime = null;
             try
             {
                 program = MeshKeyDerivation.Derive(masterSeed, BuildId, binding, MeshDerivationPurpose.Program);
                 payload = MeshKeyDerivation.Derive(masterSeed, BuildId, binding, MeshDerivationPurpose.Payload);
                 runtime = RuntimeKey();
-                var codec = new StaticPolymorphicCodecV1(program, payload, binding, record?.strength, runtime);
+                AttributeUsageAnalysis usage = null; AttributeLayout layout = null;
+                if (dynamicAttributes)
+                {
+                    usage = AttributeAllocator.Inspect(binding);
+                    layoutSeed = MeshKeyDerivation.Derive(masterSeed, BuildId, binding, MeshDerivationPurpose.AttributeLayout);
+                    layout = AttributeAllocator.Allocate(usage, layoutSeed);
+                    if (record != null && (record.usageHash != usage.Fingerprint || record.firstUv != layout.FirstUvChannel || record.secondUv != layout.SecondUvChannel))
+                        throw new InvalidOperationException("El layout/uso de materiales privado ya no corresponde al binding.");
+                }
+                var codec = new StaticPolymorphicCodecV1(program, payload, binding, record?.strength, runtime, layout, usage);
                 try
                 {
                     if (record != null && StaticPolymorphicCodecV1.ProgramHash(codec.Plan(binding.Source, record.strength)) != record.programHash)
@@ -63,6 +78,7 @@ namespace LinuxAvatarGuard
             finally
             {
                 if (program != null) Array.Clear(program, 0, program.Length); if (payload != null) Array.Clear(payload, 0, payload.Length);
+                if (layoutSeed != null) Array.Clear(layoutSeed, 0, layoutSeed.Length);
                 if (runtime != null) Array.Clear(runtime, 0, runtime.Length);
             }
         }
@@ -83,13 +99,15 @@ namespace LinuxAvatarGuard
                 throw new ArgumentException("El plan no corresponde al binding.");
             binding.Validate();
             // Reproduce the expected program instead of trusting a caller's program/hash.
-            using (var expected = CreateCodec(binding))
+            using (var expected = CreateCodecCore(binding, plan.Program.Attributes.PolicyVersion != 0))
             {
                 var hash = StaticPolymorphicCodecV1.ProgramHash(plan);
                 if (hash != StaticPolymorphicCodecV1.ProgramHash(expected.Plan(binding.Source, plan.Strength)))
                     throw new InvalidOperationException("El programa no pertenece a este contexto.");
                 var record = new BindingRecord { stableId = binding.StableId, contentHash = binding.ContentHash,
-                    sourceGuid = binding.SourceGuid, localFileId = binding.SourceLocalFileId, programHash = hash, strength = plan.Strength };
+                    sourceGuid = binding.SourceGuid, localFileId = binding.SourceLocalFileId, programHash = hash, strength = plan.Strength,
+                    firstUv = plan.Program.Attributes.FirstUvChannel, secondUv = plan.Program.Attributes.SecondUvChannel,
+                    components = plan.Program.Attributes.ComponentsPerChannel, attributePolicy = plan.Program.Attributes.PolicyVersion, usageHash = plan.AttributeUsageHash };
                 if (bindings.TryGetValue(binding.StableId, out var old) && JsonUtility.ToJson(old) != JsonUtility.ToJson(record))
                     throw new InvalidOperationException("Un binding ya registrado no puede cambiar dentro del mismo BuildID.");
                 bindings[binding.StableId] = record;
@@ -108,7 +126,7 @@ namespace LinuxAvatarGuard
         public static GuardBuildContext LoadPrivate(string buildId)
         {
             var dto = JsonUtility.FromJson<PrivateContext>(GuardPrivateContextStore.Read(buildId));
-            if (dto == null || dto.schemaVersion != SchemaVersion || dto.derivationVersion != MeshKeyDerivation.Version ||
+            if (dto == null || (dto.schemaVersion != 1 && dto.schemaVersion != SchemaVersion) || dto.derivationVersion != MeshKeyDerivation.Version ||
                 dto.codecId != StaticPolymorphicCodecV1.Id || dto.codecVersion != StaticPolymorphicCodecV1.Version || dto.buildId != buildId ||
                 dto.bindingSchema != MeshBindingIdentity.SchemaVersion || dto.bindings == null || dto.bindings.Length == 0 || dto.bindings.Length > 4096)
                 throw new InvalidOperationException("Schema/codec/contexto privado incompatible.");
@@ -123,6 +141,18 @@ namespace LinuxAvatarGuard
                         !MeshKeyDerivation.IsHex(b.sourceGuid, 32) || b.localFileId == 0 || !MeshKeyDerivation.IsHex(b.programHash, 64) ||
                         float.IsNaN(b.strength) || float.IsInfinity(b.strength) || b.strength <= 0 || b.strength > .5f || context.bindings.ContainsKey(b.stableId))
                         throw new InvalidOperationException("Registro de binding privado inválido/duplicado.");
+                    if (dto.schemaVersion == 1)
+                    {
+                        // Historical schema 1 omitted allocation fields and always used channels 6/7.
+                        if (b.attributePolicy != 0 || !string.IsNullOrEmpty(b.usageHash) ||
+                            !((b.firstUv == 0 && b.secondUv == 0 && b.components == 0) || (b.firstUv == 6 && b.secondUv == 7 && b.components == 2)))
+                            throw new InvalidOperationException("Schema 1 no puede contener asignación dinámica.");
+                        b.firstUv = 6; b.secondUv = 7; b.components = 2;
+                    }
+                    if (b.components != 2 || (b.attributePolicy == 0 ? b.firstUv != 6 || b.secondUv != 7 || !string.IsNullOrEmpty(b.usageHash) :
+                        b.attributePolicy != AttributeAllocator.PolicyVersion || b.firstUv < 4 || b.firstUv > 7 || b.secondUv < 4 || b.secondUv > 7 ||
+                        b.firstUv == b.secondUv || !MeshKeyDerivation.IsHex(b.usageHash, 64)))
+                        throw new InvalidOperationException("Layout/política de atributos privada incompatible.");
                     context.bindings.Add(b.stableId, b);
                 }
                 return context;
@@ -132,7 +162,10 @@ namespace LinuxAvatarGuard
         }
         public void Dispose() { if (!disposed) { Array.Clear(masterSeed, 0, masterSeed.Length); disposed = true; } }
         [Serializable] sealed class BindingRecord
-        { public string stableId, contentHash, sourceGuid, programHash; public long localFileId; public float strength; }
+        {
+            public string stableId, contentHash, sourceGuid, programHash; public long localFileId; public float strength;
+            public int firstUv, secondUv, components, attributePolicy; public string usageHash;
+        }
         // No public JSON/export method; this DTO is only passed to the private store.
         [Serializable] sealed class PrivateContext
         {
