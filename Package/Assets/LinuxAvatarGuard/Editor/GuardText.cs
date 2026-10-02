@@ -43,6 +43,15 @@ namespace LinuxAvatarGuard
         static readonly Dictionary<string, string[]> Translations = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
             { "Idioma", new[] { "Language", "言語" } },
+            { "El prototipo requiere Unity Editor Linux, Vulkan y Built-in Render Pipeline.", new[] { "The prototype requires Linux Unity Editor, Vulkan and Built-in Render Pipeline.", "プロトタイプにはLinux版Unity Editor、Vulkan、Built-in Render Pipelineが必要です。" } },
+            { "Seed del prototipo inválido: se requieren 32 bytes.", new[] { "Invalid prototype seed: 32 bytes are required.", "プロトタイプのシードが無効です。32バイトが必要です。" } },
+            { "Solo se admite MeshRenderer en el prototipo estático.", new[] { "The static prototype supports only MeshRenderer.", "静的プロトタイプはMeshRendererのみをサポートします。" } },
+            { "El codec estático experimental no admite skinning ni blendshapes.", new[] { "The experimental static codec does not support skinning or blendshapes.", "実験的な静的コーデックはスキニングとブレンドシェイプに対応していません。" } },
+            { "La malla contiene datos no finitos o supera el rango admitido por el prototipo.", new[] { "The mesh contains nonfinite data or exceeds the prototype's supported range.", "メッシュに非有限値が含まれるか、プロトタイプの対応範囲を超えています。" } },
+            { "El plan no pertenece a este codec experimental.", new[] { "The plan does not belong to this experimental codec.", "この設定は別の実験的コーデック用です。" } },
+            { "La malla cambió después de crear el plan.", new[] { "The mesh changed after the plan was created.", "設定の作成後にメッシュが変更されました。" } },
+            { "Clave del prototipo inválida: cuatro bytes y al menos uno distinto de cero.", new[] { "Invalid prototype unlock configuration: four bytes, with at least one nonzero value.", "プロトタイプの解除設定が無効です。4バイトが必要で、少なくとも1つは0以外にしてください。" } },
+            { "El prototipo supera su presupuesto de error geométrico.", new[] { "The prototype exceeds its geometric error budget.", "プロトタイプの幾何学的誤差が許容値を超えています。" } },
             { "Guarda primero las escenas sin nombre. Los cambios pendientes se conservan.", new[] { "Save untitled scenes first. Pending changes are preserved.", "名前のないシーンを先に保存してください。未保存の変更は保持されます。" } },
             { "Preparación incompleta. Genera una copia nueva.", new[] { "Preparation is incomplete. Prepare a new copy.", "準備が完了していません。新しいコピーを準備してください。" } },
             { "Ya existe un respaldo para este BuildID; se conserva.", new[] { "A backup already exists for this BuildID; it is preserved.", "このBuildIDのバックアップは既に存在するため、そのまま保持します。" } },
