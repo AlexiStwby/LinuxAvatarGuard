@@ -17,12 +17,16 @@ namespace LinuxAvatarGuard
         public const int Version = 1;
         public string CodecId => Id;
         public int CodecVersion => Version;
-        readonly byte[] seed;
+        readonly byte[] programSeed, payloadSeed;
+        readonly MeshBindingIdentity binding;
+        readonly float? recordedStrength;
         bool disposed;
-        public StaticPolymorphicCodecV1(byte[] seed)
+        public StaticPolymorphicCodecV1(byte[] seed) : this(seed, seed, null) { }
+        internal StaticPolymorphicCodecV1(byte[] programSeed, byte[] payloadSeed, MeshBindingIdentity binding, float? recordedStrength = null)
         {
-            if (seed == null || seed.Length != 32) throw new ArgumentException("Seed del prototipo inválido: se requieren 32 bytes.");
-            this.seed = (byte[])seed.Clone();
+            if (programSeed == null || programSeed.Length != 32 || payloadSeed == null || payloadSeed.Length != 32)
+                throw new ArgumentException("Seed del prototipo inválido: se requieren 32 bytes.");
+            this.programSeed = (byte[])programSeed.Clone(); this.payloadSeed = (byte[])payloadSeed.Clone(); this.binding = binding; this.recordedStrength = recordedStrength;
         }
         public static StaticPolymorphicCodecV1 CreateRandom()
         {
@@ -46,7 +50,9 @@ namespace LinuxAvatarGuard
         {
             RequireAlive();
             ValidateSource(source, strength);
-            using (var random = new SeedStream(seed, "LAG/static-prototype/v1/program"))
+            if (recordedStrength.HasValue && strength != recordedStrength.Value) throw new ArgumentException("La intensidad no coincide con el plan privado registrado.");
+            if (binding != null) { binding.Validate(); if (binding.Source != source) throw new ArgumentException("La fuente no pertenece al binding."); }
+            using (var random = new SeedStream(programSeed, "LAG/static-prototype/v1/program"))
             {
                 Func<Tuple<int, int>> axes = () => { int a = random.Next(3), b = (a + 1 + random.Next(2)) % 3; return Tuple.Create(a, b); };
                 Func<float> factor = () => (random.Next(2) == 0 ? -1 : 1) * (2 + random.Next(3)) / 16f;
@@ -73,11 +79,11 @@ namespace LinuxAvatarGuard
                 for (int i = instructions.Count - 1; i > 0; i--)
                 { int j = random.Next(i + 1); var t = instructions[i]; instructions[i] = instructions[j]; instructions[j] = t; }
                 return new CodecPlan(source, new CodecProgram(Id, Version, 2, new AttributeLayout(6, 7, 2, false), instructions.ToArray()),
-                    strength, Fingerprint(source), this);
+                    strength, MeshBindingIdentity.ContentFingerprint(source), this, binding?.StableId);
             }
         }
         static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        static void ValidateSource(Mesh source, float strength)
+        internal static void ValidateSource(Mesh source, float strength)
         {
             if (!source || !source.isReadable) throw new InvalidOperationException("La malla debe ser legible. No se cambia su importador automáticamente.");
             if (!Finite(strength) || strength <= 0 || strength > .5f) throw new ArgumentException("Intensidad fuera de rango (0, 0.5].");
@@ -108,7 +114,8 @@ namespace LinuxAvatarGuard
             if (plan == null || plan.Owner != this || !plan.Source || plan.Source != source || plan.Program.CodecId != Id)
                 throw new ArgumentException("El plan no pertenece a este codec experimental.");
             ValidateSource(source, plan.Strength);
-            if (Fingerprint(source) != plan.SourceFingerprint) throw new InvalidOperationException("La malla cambió después de crear el plan.");
+            if (MeshBindingIdentity.ContentFingerprint(source) != plan.SourceFingerprint) throw new InvalidOperationException("La malla cambió después de crear el plan.");
+            if (binding != null) binding.Validate();
             foreach (var instruction in plan.Program.Instructions) instruction.Validate();
         }
         public void Validate(Mesh source, CodecPlan plan) => CheckPlan(source, plan);
@@ -120,7 +127,7 @@ namespace LinuxAvatarGuard
             var key = new Vector4(runtimeKey[0], runtimeKey[1], runtimeKey[2], runtimeKey[3]) / 255f;
             var positions = source.vertices;
             var first = new List<Vector2>(positions.Length); var second = new List<Vector2>(positions.Length);
-            using (var random = new SeedStream(seed, "LAG/static-prototype/v1/payload"))
+            using (var random = new SeedStream(payloadSeed, "LAG/static-prototype/v1/payload"))
                 for (int i = 0; i < positions.Length; i++)
                 {
                     var payload = new Vector4(random.Next(256) / 127.5f - 1, random.Next(256) / 127.5f - 1,
@@ -169,33 +176,9 @@ namespace LinuxAvatarGuard
         }
         static string Digest(byte[] bytes)
         { using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant(); }
-        static string Fingerprint(Mesh mesh)
-        {
-            using (var stream = new MemoryStream())
-            {
-                using (var output = new BinaryWriter(stream, Encoding.UTF8, true))
-                {
-                    output.Write("LAG/static-source/v1"); output.Write((int)mesh.indexFormat); output.Write(mesh.vertexCount);
-                    foreach (var attribute in mesh.GetVertexAttributes())
-                    { output.Write((int)attribute.attribute); output.Write((int)attribute.format); output.Write(attribute.dimension); output.Write(attribute.stream); }
-                    output.Write(-1);
-                    foreach (var v in mesh.vertices) { output.Write(v.x); output.Write(v.y); output.Write(v.z); }
-                    foreach (var v in mesh.normals) { output.Write(v.x); output.Write(v.y); output.Write(v.z); }
-                    output.Write(mesh.tangents.Length); foreach (var v in mesh.tangents) for (int j = 0; j < 4; j++) output.Write(v[j]);
-                    var uv = new List<Vector4>();
-                    for (int channel = 0; channel < 8; channel++)
-                    { mesh.GetUVs(channel, uv); output.Write(uv.Count); foreach (var v in uv) for (int j = 0; j < 4; j++) output.Write(v[j]); }
-                    output.Write(mesh.colors.Length); foreach (var v in mesh.colors) for (int j = 0; j < 4; j++) output.Write(v[j]);
-                    output.Write(mesh.subMeshCount);
-                    for (int sub = 0; sub < mesh.subMeshCount; sub++)
-                    { output.Write((int)mesh.GetTopology(sub)); var indices = mesh.GetIndices(sub); output.Write(indices.Length); foreach (int index in indices) output.Write(index); }
-                    for (int j = 0; j < 3; j++) { output.Write(mesh.bounds.center[j]); output.Write(mesh.bounds.extents[j]); }
-                }
-                return Digest(stream.ToArray());
-            }
-        }
-        public void Dispose() { if (!disposed) { Array.Clear(seed, 0, seed.Length); disposed = true; } }
-        // HMAC counter stream with explicit versioned domains; Stage 5 will add binding-aware derivation.
+        public void Dispose()
+        { if (!disposed) { Array.Clear(programSeed, 0, programSeed.Length); Array.Clear(payloadSeed, 0, payloadSeed.Length); disposed = true; } }
+        // HMAC counter stream; GuardBuildContext supplies independent HKDF-derived binding seeds.
         sealed class SeedStream : IDisposable
         {
             readonly HMACSHA256 hmac;

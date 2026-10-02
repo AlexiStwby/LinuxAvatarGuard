@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased — security foundation
+- Binding-aware HKDF-SHA256 derivation, stable static asset/renderer identity and a reproducible versioned private build context.
+- Linux private-context persistence with 0700/0600, descriptor-based no-follow IO, create-only atomic publication and strict restore validation; RFC and adversarial IO tests.
 - Research opt-in static polymorphic prototype with eight typed reversible instructions, bounded nonlinear bends and three-axis keyed offsets; the avatar wizard still uses legacy.
 - Domain-separated deterministic seed streams, source-mutation detection and an explicit Linux/Vulkan/Built-in environment gate for the prototype.
 - Static prototype rejects skinning, blendshapes, occupied carriers and unsupported numeric inputs; no runtime CPU mesh decoder is added.

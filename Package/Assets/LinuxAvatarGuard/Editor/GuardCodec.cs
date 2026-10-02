@@ -62,12 +62,13 @@ namespace LinuxAvatarGuard
     {
         public CodecProgram Program { get; }
         public float Strength { get; }
-        // A plan is tied to its source object. Stable asset/binding identities are a later stage.
+        public string BindingStableId { get; }
+        // Legacy/standalone plans leave BindingStableId null. Context-created plans also validate the captured binding.
         internal Mesh Source { get; }
         internal string SourceFingerprint { get; }
         internal object Owner { get; }
-        internal CodecPlan(Mesh source, CodecProgram program, float strength, string fingerprint = null, object owner = null)
-        { Source = source; Program = program; Strength = strength; SourceFingerprint = fingerprint; Owner = owner; }
+        internal CodecPlan(Mesh source, CodecProgram program, float strength, string fingerprint = null, object owner = null, string bindingId = null)
+        { Source = source; Program = program; Strength = strength; SourceFingerprint = fingerprint; Owner = owner; BindingStableId = bindingId; }
     }
 
     public sealed class DecoderFragment

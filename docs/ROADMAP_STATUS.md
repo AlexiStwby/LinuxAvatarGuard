@@ -1,12 +1,12 @@
 # Estado y plan de mejora de seguridad
 
-Fecha: 2026-10-01. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `LinuxAvatarGuard_SECURITY_ROADMAP.md`, especialmente apartados 37–45.
+Fecha: 2026-10-02. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `LinuxAvatarGuard_SECURITY_ROADMAP.md`, especialmente apartados 37–45.
 
 ## Decisión de esta iteración
 
 El roadmap identifica correctamente la necesidad de diversidad, validación y trazabilidad. El codec actual puede ser reconstruido con una fórmula estable si se conocen sus cuatro parámetros. La baseline añadida reproduce esa debilidad; no constituye una nueva protección.
 
-La primera iteración entregó auditoría, baseline y diseño. La continuación implementó el adaptador legacy, metadata versionada y manejo de fallos de preparación, y ejecutó un análisis GPU controlado en Unity. La siguiente etapa autorizada implementa el prototipo polimórfico estático de Stage 4 como API opt-in, separado del asistente y los perfiles. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de la release 0.2.1 no se sustituyen. TextureGuard, fingerprints y la integración productiva del codec nuevo siguen pendientes.
+La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. TextureGuard, fingerprints e integración productiva del codec nuevo siguen pendientes.
 
 El análisis GPU se limita a Unity y aplicaciones de prueba propias por instrucción del usuario. RenderDoc se descargó con su permiso; no se realiza análisis GPU sobre VRChat.
 
@@ -81,6 +81,18 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Next stage:** Stage 5, identidad estable y derivación por binding/mesh con vectores verificables y metadata privada versionada. Mantener el prototipo fuera de la ruta predeterminada hasta resolver integración contextual y skinning.
 
+## Stage 5 — Per-Mesh Key Derivation
+
+**Status:** implementado para el prototipo estático, separado de preparación/perfiles.
+
+**Changes:** identidad por GUID/localFileID/contenido/jerarquía/componente, HKDF-SHA256 con dominios de programa/payload por binding y contexto privado versionado. La persistencia Linux usa 0700/0600, descriptores sin seguir symlinks, publicación atómica sin sobrescritura y validación de dueño/tipo/links/permisos. [PER_MESH_DERIVATION.md](PER_MESH_DERIVATION.md) detalla contratos y límites.
+
+**Tests:** 50 comprobaciones correctas: vectores RFC 5869 A.1/A.2/A.3, dominios, identidades, mutaciones, reproducción exacta desde disco e IO adversarial. Las 44 pruebas de Stage 4 siguen correctas. Solo fixtures propias en Unity Vulkan; ningún análisis de VRChat.
+
+**Known issues:** cuatro valores de runtime compartidos/observables; no secretos independientes por renderer en OSC. Identidad estática, dependiente de fuente/meta/jerarquía conservadas. Cadenas privadas no tienen borrado garantizado; no sandbox contra el mismo usuario. No integración productiva/FX/SDK ni skinning.
+
+**Next stage:** Stage 6, diversidad de 100 builds sintéticos completos y extractor adaptativo. El gate de avatares procesados por SDK continúa pendiente.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -134,7 +146,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 2 | Current behavior tests | Baseline ejecutada; bundle, cliente, poses y fallos pendientes. |
 | 3 | Codec IR | Contratos y adaptador legacy implementados; 18 comprobaciones. |
 | 4 | Polymorphic prototype | Implementado como API estática opt-in; 44 comprobaciones y captura GPU en Unity. |
-| 5 | Per-mesh derivation | Planificado; distinguir diversidad de aislamiento criptográfico. |
+| 5 | Per-mesh derivation | Implementado para estático; 50 comprobaciones y contexto privado reproducible. |
 | 6 | Diversity tests | Planificado; 100 builds completos y extractor adaptativo. |
 | 7 | Dynamic attributes | Planificado; matriz positiva de carriers/features. |
 | 8 | ShaderForge integration | Planificado; remapeo contextual, pases y variantes lilToon. |

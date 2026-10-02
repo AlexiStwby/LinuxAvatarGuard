@@ -1,6 +1,6 @@
 # Diseño del codec y migración
 
-Estado: diseño de evolución. El contrato legacy y el prototipo estático de Stage 4 están implementados. La derivación por binding, los carriers dinámicos y la integración productiva siguen pendientes. Fecha: 2026-10-01.
+Estado: diseño de evolución. Contrato legacy, prototipo estático y derivación/contexto por binding implementados. Carriers dinámicos e integración productiva pendientes. Fecha: 2026-10-02. Contrato de Stage 5 en [PER_MESH_DERIVATION.md](PER_MESH_DERIVATION.md).
 
 ## Objetivo y límites
 

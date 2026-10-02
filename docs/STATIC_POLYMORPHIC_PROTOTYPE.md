@@ -38,7 +38,7 @@ Se utiliza HMAC-SHA256 con contador little-endian y labels distintos para progra
 
 La IR tiene un hash canónico basado en versiones, layout y argumentos numéricos. El plan retiene una huella de atributos, posiciones, topología y bounds del source. `Validate`, `Encode` y `EmitDecoder` vuelven a comprobarla. Cambiar la fuente invalida el plan. Se mantiene además la pertenencia al objeto fuente y al dueño del seed; un plan no se puede ejecutar desde otro codec.
 
-La identidad aún no incorpora GUID/localFileID ni renderer/binding; dos meshes usando el mismo seed pueden compartir programa y stream de payload. No se afirma aislamiento por mesh. Para el shader, los cuatro valores de runtime siguen siendo observables. Una configuración privada del prototipo con los cuatro bytes cero se rechaza, aunque cero es el estado de material inicial y permite medir el aspecto bloqueado.
+El constructor standalone mantiene los streams de Stage 4: dos meshes usando el mismo seed pueden compartir programa/payload. La continuación de [Stage 5](PER_MESH_DERIVATION.md) añade GUID/localFileID/renderer/binding y suministra seeds derivados independientes desde `GuardBuildContext`. Los cuatro valores de runtime siguen compartidos/observables. Una configuración privada del prototipo con cuatro bytes cero se rechaza, aunque cero es el estado inicial del material y permite medir el aspecto bloqueado.
 
 Ejemplo de llamada explícita desde código Editor de investigación:
 
@@ -115,4 +115,4 @@ La captura usa el comando de GPU threat model con la variable adicional y salida
 
 ## Próxima etapa
 
-Stage 5: identidad estable y derivación por binding/mesh, separación de dominios con vectores verificables y persistencia privada versionada del contexto. Mantener el camino de avatar predeterminado en legacy. Después medir 100 builds completos y un extractor adaptativo; materiales y clips deben ligarse al programa correcto antes de habilitar preparación productiva.
+Stage 5 implementado: [identidad, derivación por binding y contexto privado](PER_MESH_DERIVATION.md). Siguiente gate: 100 builds completos y extractor adaptativo. Materiales y clips deben ligarse al programa correcto antes de habilitar preparación productiva; el asistente conserva legacy.
