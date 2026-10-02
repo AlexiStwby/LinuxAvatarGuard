@@ -1,6 +1,6 @@
 # Diseño del codec y migración
 
-Estado: diseño de evolución. El contrato y adaptador legacy se implementaron en la continuación de Stage 3; las operaciones polimórficas, derivación y carriers dinámicos siguen pendientes. Fecha: 2026-10-01.
+Estado: diseño de evolución. El contrato legacy y el prototipo estático de Stage 4 están implementados. La derivación por binding, los carriers dinámicos y la integración productiva siguen pendientes. Fecha: 2026-10-01.
 
 ## Objetivo y límites
 
@@ -42,7 +42,9 @@ interface IMeshCodec
 
 El primer implementador es `LegacyLinearCodecV1`, que delega en el código existente sin alterar fórmula, aleatoriedad, canales, nombres, presupuesto OSC ni formatos. Los builds antiguos no deben pasar por el generador de IR nuevo para volver a funcionar.
 
-Implementación presente: `GuardCodec.cs` contiene contratos inmutables y un único opcode legacy; no es todavía un generador polimórfico. Se prueba contra el decoder original congelado y la fórmula independiente. El generador futuro añadirá operaciones con validación y emisión propias. `GuardBuildManifest` y la preparación incorporan metadata y estados para builds nuevos sin modificar las claves existentes.
+Implementación presente: `GuardCodec.cs` mantiene el programa legacy con schema 1 y añade instrucciones tipadas para el prototipo con schema 2. `GuardCodecInstruction.cs` implementa swap, flip, shear triangular, bend acotado y offset vectorial keyed. `GuardStaticCodec.cs` genera ocho instrucciones con seed explícito y dominios separados para programa/payload; valida mutaciones de fuente y emite la inversa HLSL. Detalles y evidencia en [STATIC_POLYMORPHIC_PROTOTYPE.md](STATIC_POLYMORPHIC_PROTOTYPE.md).
+
+El decoder legacy continúa comprobándose contra su fixture congelado. `GuardBuildManifest` y la preparación productiva conservan el codec legacy; el prototipo no se puede seleccionar en el asistente ni registra perfiles OSC. Se añade mediante una llamada explícita a la API de investigación sobre un MeshRenderer estático propio.
 
 ## IR y validez numérica
 

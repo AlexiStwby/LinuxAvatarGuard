@@ -85,7 +85,14 @@ def run(root):
     reference = json.loads((root / 'synthetic-reference.json').read_text())
     if reference['fixture'] != 'procedural Unity sphere; no commercial assets' or reference['graphics'] != 'Vulkan':
         raise ValueError('Only the synthetic Unity Vulkan fixture is accepted')
-    capture = root / 'legacy-unlocked_capture.rdc'
+    codec = reference.get('codecId', 'legacy-linear')
+    if codec not in ('legacy-linear', 'static-polymorphic-prototype'):
+        raise ValueError('Unknown synthetic codec fixture')
+    prefix = reference.get('capturePrefix', 'legacy-unlocked')
+    expected_prefix = 'static-prototype-unlocked' if codec == 'static-polymorphic-prototype' else 'legacy-unlocked'
+    if prefix != expected_prefix:
+        raise ValueError('Unexpected synthetic capture prefix')
+    capture = root / (prefix + '_capture.rdc')
     cap = rd.OpenCaptureFile()
     controller = None
     try:
@@ -120,9 +127,10 @@ def run(root):
             raise RuntimeError('Synthetic mesh draw not found')
         (root / 'renderdoc-inspection.json').write_text(json.dumps({'status': 'inspected', 'draws': actions}, indent=2))
         if not any(a['decodedGeometryObservable'] and a['knownSyntheticRuntimeKeysObservable'] for a in analyses):
-            raise RuntimeError('Expected legacy GPU exposure was not demonstrated: ' + json.dumps(analyses))
+            raise RuntimeError('Expected synthetic GPU exposure was not demonstrated: ' + json.dumps(analyses))
         return {'status': 'verified', 'candidateDraws': len(actions), 'onlySyntheticUnity': True,
-                'capture': capture.name, 'renderdocVersion': rd.GetVersionString(), 'draws': analyses,
+                'capture': capture.name, 'codecId': codec, 'codecVersion': reference.get('codecVersion', 1),
+                'programHash': reference.get('programHash'), 'renderdocVersion': rd.GetVersionString(), 'draws': analyses,
                 'scope': 'static synthetic geometry in Unity Vulkan; no VRChat process inspected'}
     finally:
         if controller is not None:

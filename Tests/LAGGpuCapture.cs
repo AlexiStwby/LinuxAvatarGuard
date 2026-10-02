@@ -31,7 +31,11 @@ public static class LAGGpuCapture
                 "; explicit opt-in=" + (Environment.GetEnvironmentVariable("LAG_GPU_AUDIT_ALLOWED") == "synthetic-unity-only") +
                 "; dataPath=" + Application.dataPath);
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-        var output = Path.GetFullPath("../evidence/gpu-audit"); Directory.CreateDirectory(output);
+        string choice = Environment.GetEnvironmentVariable("LAG_GPU_AUDIT_CODEC") ?? "legacy";
+        if (choice != "legacy" && choice != "static-prototype") throw new ArgumentException("Only known synthetic codec fixtures are allowed.");
+        bool prototype = choice == "static-prototype";
+        var output = Path.GetFullPath(prototype ? "../evidence/gpu-audit/static-prototype" : "../evidence/gpu-audit"); Directory.CreateDirectory(output);
+        string capturePrefix = prototype ? "static-prototype-unlocked" : "legacy-unlocked";
         // API 1.6.0: stable function slots from the official renderdoc_app.h.
         if (RENDERDOC_GetAPI(10600, out var api) != 1) throw new Exception("RenderDoc API unavailable");
         var setPath = Function<SetPath>(api, 11);
@@ -40,15 +44,17 @@ public static class LAGGpuCapture
         string shaders = "Assets/GpuAudit";
         if (!AssetDatabase.IsValidFolder(shaders)) AssetDatabase.CreateFolder("Assets", "GpuAudit");
         var objects = new System.Collections.Generic.List<Object>();
+        var experimental = prototype ? new StaticPolymorphicCodecV1(Enumerable.Range(0,32).Select(i=>(byte)i).ToArray()) : null;
         try
         {
             var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere); objects.Add(sphere);
             Object.DestroyImmediate(sphere.GetComponent<Collider>());
             var source = Object.Instantiate(sphere.GetComponent<MeshFilter>().sharedMesh); objects.Add(source);
-            var codec = MeshCodecs.Legacy;
-            var encoded = codec.Encode(source, codec.Plan(source, .15f), new[] { 83, 127, 191, 239 }); objects.Add(encoded);
+            IMeshCodec codec = prototype ? (IMeshCodec)experimental : MeshCodecs.Legacy;
+            var plan = codec.Plan(source, .15f);
+            var encoded = codec.Encode(source, plan, new[] { 83, 127, 191, 239 }); objects.Add(encoded);
             sphere.GetComponent<MeshFilter>().sharedMesh = encoded;
-            var material = new Material(new GuardShaders(shaders, Guid.NewGuid().ToString("N")).Copy(Shader.Find("lilToon")));
+            var material = new Material(new GuardShaders(shaders, Guid.NewGuid().ToString("N"),codec.EmitDecoder(plan)).Copy(Shader.Find("lilToon")));
             objects.Add(material); material.name = "SyntheticGpuAuditMaterial";
             material.SetFloat("_AsUnlit", 1); material.SetColor("_Color", new Color(.25f, .7f, .9f));
             var key = new[] { 83, 127, 191, 239 };
@@ -69,9 +75,11 @@ public static class LAGGpuCapture
                 fixture = "procedural Unity sphere; no commercial assets", vertexCount = source.vertexCount,
                 indices = source.triangles, original = source.vertices, encoded = encoded.vertices,
                 originalClip = source.vertices.Select(v => originalMvp * new Vector4(v.x, v.y, v.z, 1)).ToArray(),
-                worldToClip = MatrixValues(gpuProjection * camera.worldToCameraMatrix), graphics = SystemInfo.graphicsDeviceType.ToString()
+                worldToClip = MatrixValues(gpuProjection * camera.worldToCameraMatrix), graphics = SystemInfo.graphicsDeviceType.ToString(),
+                codecId = codec.CodecId, codecVersion = codec.CodecVersion, capturePrefix = capturePrefix,
+                programHash = prototype ? StaticPolymorphicCodecV1.ProgramHash(plan) : null
             }, true));
-            setPath(Path.Combine(output, "legacy-unlocked")); start(IntPtr.Zero, IntPtr.Zero);
+            setPath(Path.Combine(output, capturePrefix)); start(IntPtr.Zero, IntPtr.Zero);
             camera.Render();
             var previous = RenderTexture.active; RenderTexture.active = target;
             var image = new Texture2D(256, 256, TextureFormat.RGBA32, false); objects.Add(image);
@@ -84,12 +92,12 @@ public static class LAGGpuCapture
             if (end(IntPtr.Zero, IntPtr.Zero) != 1) throw new Exception("RenderDoc frame capture failed");
             Debug.Log("LAG_GPU_CAPTURE_SUCCESS synthetic Unity Vulkan only");
         }
-        finally { foreach (var item in objects.AsEnumerable().Reverse()) if (item) Object.DestroyImmediate(item); }
+        finally { foreach (var item in objects.AsEnumerable().Reverse()) if (item) Object.DestroyImmediate(item); experimental?.Dispose(); }
     }
     static float[] MatrixValues(Matrix4x4 matrix) => Enumerable.Range(0, 16).Select(i => matrix[i / 4, i % 4]).ToArray();
     [Serializable] sealed class Reference
     {
-        public string fixture, graphics; public int vertexCount;
+        public string fixture, graphics, codecId, capturePrefix, programHash; public int vertexCount, codecVersion;
         public int[] indices; public Vector3[] original, encoded; public Vector4[] originalClip; public float[] worldToClip;
     }
 }

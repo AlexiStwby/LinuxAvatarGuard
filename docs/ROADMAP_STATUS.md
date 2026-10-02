@@ -6,7 +6,7 @@ Fecha: 2026-10-01. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `Li
 
 El roadmap identifica correctamente la necesidad de diversidad, validación y trazabilidad. El codec actual puede ser reconstruido con una fórmula estable si se conocen sus cuatro parámetros. La baseline añadida reproduce esa debilidad; no constituye una nueva protección.
 
-La primera iteración entregó auditoría, baseline y diseño. La continuación autorizada implementa el adaptador legacy, metadata versionada y manejo de fallos de preparación, y ejecuta un análisis GPU controlado en Unity. La fórmula, UV, formato OSC y avatares publicados siguen compatibles; los binarios de la release 0.2.1 no se sustituyen. TextureGuard, fingerprints y el codec polimórfico siguen pendientes.
+La primera iteración entregó auditoría, baseline y diseño. La continuación implementó el adaptador legacy, metadata versionada y manejo de fallos de preparación, y ejecutó un análisis GPU controlado en Unity. La siguiente etapa autorizada implementa el prototipo polimórfico estático de Stage 4 como API opt-in, separado del asistente y los perfiles. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de la release 0.2.1 no se sustituyen. TextureGuard, fingerprints y la integración productiva del codec nuevo siguen pendientes.
 
 El análisis GPU se limita a Unity y aplicaciones de prueba propias por instrucción del usuario. RenderDoc se descargó con su permiso; no se realiza análisis GPU sobre VRChat.
 
@@ -63,7 +63,23 @@ El primer arranque tuvo una compilación transitoria sin resolver `GuardText` y 
 
 **Known issues:** la fórmula del roadmap `decode → skinning` requiere demostrar un orden compatible con Unity/lilToon. Las transformaciones afines pueden colapsarse y un extractor adaptativo podría interpretarlas. La derivación de constantes por mesh no convierte valores sincronizados en secretos independientes.
 
-**Next stage:** prototipo estático opt-in, separado de los perfiles legacy. No extender operaciones nuevas a meshes skinned sin resolver el contrato de deformación.
+**Next stage:** el prototipo estático de Stage 4 se implementó en la continuación siguiente. No extender sus operaciones a meshes skinned sin resolver el contrato de deformación.
+
+## Stage 4 — Polymorphic Mesh Codec prototype
+
+**Status:** prototipo estático opt-in implementado y probado; no habilitado en la preparación productiva.
+
+**Changes:** [GuardStaticCodec.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardStaticCodec.cs) genera ocho instrucciones de [GuardCodecInstruction.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardCodecInstruction.cs), incluidas dos operaciones no lineales acotadas y dos offsets keyed en tres ejes. Seed de 32 bytes, HMAC counter stream con dominios versionados para programa/payload, IR schema 2 y hash canónico. La fuente queda vinculada al plan mediante una huella de geometría, atributos y topología; una mutación invalida encoding y emisión. No se añade decoder CPU de runtime.
+
+La API exige Linux Editor, Vulkan y Built-in. Rechaza datos de skinning, todos los blendshapes, UV7/UV8 ocupados, valores no finitos y coordenadas fuera de ±16 unidades por componente; además cancela si el round-trip del encoder supera 10⁻⁵ unidades. `RequireStaticRenderer` rechaza SkinnedMeshRenderer. El builder y el asistente siguen usando exclusivamente legacy.
+
+**Tests:** 44 comprobaciones de [LAGStaticPrototypeValidation.cs](../Tests/LAGStaticPrototypeValidation.cs). 16 seeds de fixture producen 16 programas y 16 cuerpos de decoder distintos; error máximo del intérprete independiente ≈ 1,93 × 10⁻⁶ unidades, incluyendo escalas 0,001 / 0,05 / 20. RMS al aplicar un programa de otro seed ≈ 1,1182; RMS al aplicar la fórmula legacy ≈ 1,0019. En tres ángulos, diferencia visual desbloqueada 0; las imágenes con valores ausentes/incorrectos difieren >0,01. Seis shaders generados sin errores y bundle Windows64 de fixture construido.
+
+La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correctas, además de sus 13 shaders/bundle. Las seis pruebas OSC siguen correctas. El código fuente compila y el prototipo funciona sin SDK en Vulkan; una ejecución OpenGLCore confirma el rechazo temprano. Captura RenderDoc del prototipo en Unity: dos draws, geometría PostVS corregida y cuatro valores de runtime observables; error máximo frente a proyección original ≈ 1,33 × 10⁻⁷. Detalle en [STATIC_POLYMORPHIC_PROTOTYPE.md](STATIC_POLYMORPHIC_PROTOTYPE.md).
+
+**Known issues:** no integración de avatar/FX/OSC para el prototipo, persistencia de seed de build, derivación por binding, carriers dinámicos, 100 builds completos, revisión final del SDK, benchmark ni matriz animada. La diversidad se mide sobre 16 programas/encodings, no 16 uploads. El intérprete de la prueba reconstruye todos al leer la IR; el polimorfismo no demuestra impedir un extractor adaptativo. La observabilidad PostVS permanece.
+
+**Next stage:** Stage 5, identidad estable y derivación por binding/mesh con vectores verificables y metadata privada versionada. Mantener el prototipo fuera de la ruta predeterminada hasta resolver integración contextual y skinning.
 
 ## Fundación de validación y ciclo de vida
 
@@ -117,7 +133,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 1 | Repository audit | Auditoría entregada. |
 | 2 | Current behavior tests | Baseline ejecutada; bundle, cliente, poses y fallos pendientes. |
 | 3 | Codec IR | Contratos y adaptador legacy implementados; 18 comprobaciones. |
-| 4 | Polymorphic prototype | Planificado; empezar con meshes estáticas propias y opt-in. |
+| 4 | Polymorphic prototype | Implementado como API estática opt-in; 44 comprobaciones y captura GPU en Unity. |
 | 5 | Per-mesh derivation | Planificado; distinguir diversidad de aislamiento criptográfico. |
 | 6 | Diversity tests | Planificado; 100 builds completos y extractor adaptativo. |
 | 7 | Dynamic attributes | Planificado; matriz positiva de carriers/features. |
@@ -132,7 +148,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 16 | Texture fingerprint | Pendiente; evaluar compresión, resize y color. |
 | 17 | Fingerprint verifier | Pendiente; confianza calibrada y falsos positivos/negativos. |
 | 18 | CanaryGuard | Pendiente; opcional, removible y de coste medido. |
-| 19 | GPU threat-model testing | Captura y análisis estático en Unity realizados; matriz animada y codec nuevo pendientes. |
+| 19 | GPU threat-model testing | Captura estática de legacy y del prototipo en Unity realizada; matriz animada y análisis adaptativo pendientes. |
 | 20 | Security profiles | Pendiente; solo agrupar capacidades realmente soportadas. |
 | 21 | Pre-upload validator | Metadata, estados y rollback implementados; callbacks/revisión final pendientes. |
 | 22 | Security report | Diseño de campos; no reemplaza el reporte actual. |
@@ -149,7 +165,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 5. `feat(meshguard): add static polymorphic prototype`: experimento opt-in, fuera de la ruta predeterminada; no extenderlo automáticamente a Carukia.
 6. `test(meshguard): measure diversity and adaptive decoding`: 100 builds, error geométrico, ataques propios y métricas de coste.
 
-Los puntos 1 y la fundación del 2 están implementados; el análisis inicial del punto 4 se realizó. Los puntos 3, 5 y 6 siguen pendientes. Cada cambio debe dejar pruebas anteriores correctas y un estado de etapa actualizado. La implementación completa de otras capas se mantiene separada.
+Los puntos 1 y la fundación del 2 están implementados; el análisis inicial del punto 4 se realizó para ambos codecs, y el prototipo estático del punto 5 se implementó como API opt-in. Los puntos 3 y 6 siguen pendientes. Cada cambio debe dejar pruebas anteriores correctas y un estado de etapa actualizado. La implementación completa de otras capas se mantiene separada.
 
 La continuación se valida con `LAGImplementationValidation.Run`: codec, funcionales, baseline adversarial, preparación y shaders/bundle Windows64. También se comprueba compilación del código fuente sin SDK y la localización ES/EN/JP. Los nuevos binarios se prepararán en una release posterior; no se afirma importar un unitypackage nuevo cuando se ha probado código copiado.
 

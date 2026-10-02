@@ -30,7 +30,7 @@ Skinning y compatibilidad siguen siendo experimentales. Para Modular Avatar, Ava
 
 Para trabajar desde el código, copia `Package/Assets/LinuxAvatarGuard/` y su archivo `.meta` a `Assets/` en tu proyecto compatible. No copies `Tests/` al proyecto de un usuario final.
 
-El código en `main` incorpora una fundación de seguridad aún sin nueva release: contrato del codec legacy, manifests versionados y recuperación ante fallos de preparación. La [auditoría](docs/SECURITY_ARCHITECTURE_CURRENT.md), el [diseño del codec](docs/POLYMORPHIC_CODEC_DESIGN.md) y el [estado del roadmap](docs/ROADMAP_STATUS.md) describen los resultados y el trabajo pendiente. El codec polimórfico sigue planificado. El [experimento GPU](docs/GPU_CAPTURE_THREAT_MODEL.md) usa RenderDoc exclusivamente sobre contenido sintético propio en Unity.
+El código en `main` incorpora una fundación de seguridad aún sin nueva release: contrato del codec legacy, manifests versionados y recuperación ante fallos de preparación. La [auditoría](docs/SECURITY_ARCHITECTURE_CURRENT.md), el [diseño del codec](docs/POLYMORPHIC_CODEC_DESIGN.md) y el [estado del roadmap](docs/ROADMAP_STATUS.md) describen los resultados y el trabajo pendiente. El [prototipo polimórfico estático](docs/STATIC_POLYMORPHIC_PROTOTYPE.md) está implementado como API de investigación opt-in; el asistente de avatares conserva legacy. El [experimento GPU](docs/GPU_CAPTURE_THREAT_MODEL.md) usa RenderDoc exclusivamente sobre contenido sintético propio en Unity.
 
 Pruebas OSC, desde la raíz del repositorio:
 

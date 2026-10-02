@@ -1,12 +1,16 @@
 # Changelog
 
 ## Unreleased — security foundation
+- Research opt-in static polymorphic prototype with eight typed reversible instructions, bounded nonlinear bends and three-axis keyed offsets; the avatar wizard still uses legacy.
+- Domain-separated deterministic seed streams, source-mutation detection and an explicit Linux/Vulkan/Built-in environment gate for the prototype.
+- Static prototype rejects skinning, blendshapes, occupied carriers and unsupported numeric inputs; no runtime CPU mesh decoder is added.
+- Three-angle real Vulkan/lilToon comparisons, independent round-trip checks, Windows64 fixture bundle and controlled GPU exposure measurements for the prototype.
 - Editor-only codec contracts and a typed legacy program; existing decoder, UV7/UV8 and OSC format remain compatible.
 - Versioned public/private build metadata explicitly reports zero protected textures for the legacy codec.
 - Preparation includes backup, profile and scene in its failure handling; failed copies are removed and recorded privately.
 - Incomplete profiles are rejected by scene preview/opening and OSC start; legacy profiles remain supported.
 - Independent compatibility tests, fault injection and controlled RenderDoc Vulkan analysis on synthetic Unity content.
-- This stage does not introduce the polymorphic codec or claim resistance to GPU capture.
+- The prototype is outside production avatar preparation; measured PostVS exposure remains for both codecs.
 
 ## 0.2.1
 - ES / EN / JP language selector in the wizard, with Spanish as the default.

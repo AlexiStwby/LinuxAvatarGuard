@@ -91,4 +91,12 @@ Esto demuestra exposición de una fixture estática en este entorno. No es una c
 - Mantener pruebas numéricas de skinning y normalización en Unity. Una futura captura de geometría animada se realizará sobre fixtures propias en Unity o un player propio, dentro del mismo alcance autorizado.
 - No bloquear herramientas gráficas, modificar drivers ni intervenir en VRChat para intentar ocultar esta superficie.
 
-El próximo prototipo sigue limitado a meshes estáticas y opt-in. El modelo GPU condiciona sus afirmaciones de seguridad desde el principio, aunque la evaluación adversarial completa de Stage 19 permanezca pendiente.
+## Continuación: prototipo polimórfico estático
+
+El prototipo de Stage 4 se implementó y repitió la captura controlada, con `LAG_GPU_AUDIT_CODEC=static-prototype`. El runner y analizador aceptan únicamente los dos codecs conocidos de estas fixtures. La evidencia nueva se guarda en `evidence/gpu-audit/static-prototype/`, conservando la evidencia legacy anterior.
+
+Resultado: dos draws, 515 vértices y 2304 índices por draw; entrada codificada exacta y geometría PostVS corregida con error máximo ≈ `1,33e-7`. Los valores públicos de runtime siguen observables en el constant block 0, offset relativo 736 bytes. La convención Y y el RMS sin ajuste se conservan en el reporte. No se inspeccionó VRChat.
+
+Se confirma que variar la secuencia, introducir bends reversibles y usar offsets vectoriales no oculta la salida reconstruida del vertex shader. La validación visual y numérica del nuevo programa es independiente de esta conclusión de exposición. Detalle del contrato, pruebas y límites en [STATIC_POLYMORPHIC_PROTOTYPE.md](STATIC_POLYMORPHIC_PROTOTYPE.md).
+
+El prototipo sigue limitado a meshes estáticas y opt-in. El modelo GPU condiciona sus afirmaciones de seguridad; la matriz animada, el análisis adaptativo y la evaluación completa de Stage 19 permanecen pendientes.

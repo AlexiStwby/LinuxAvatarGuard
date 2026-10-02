@@ -13,6 +13,7 @@
 !/docs/POLYMORPHIC_CODEC_DESIGN.md
 !/docs/ROADMAP_STATUS.md
 !/docs/GPU_CAPTURE_THREAT_MODEL.md
+!/docs/STATIC_POLYMORPHIC_PROTOTYPE.md
 
 /Package/*
 !/Package/Assets/
@@ -33,6 +34,7 @@
 !/Tests/LAGGpuCapture.cs
 !/Tests/LAGPreparationValidation.cs
 !/Tests/analyze_gpu_capture.py
+!/Tests/LAGStaticPrototypeValidation.cs
 
 /dist/*
 !/dist/booth/
