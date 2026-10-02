@@ -6,6 +6,13 @@
 !/Package/
 !/Tests/
 !/dist/
+!/docs/
+
+/docs/*
+!/docs/SECURITY_ARCHITECTURE_CURRENT.md
+!/docs/POLYMORPHIC_CODEC_DESIGN.md
+!/docs/ROADMAP_STATUS.md
+!/docs/GPU_CAPTURE_THREAT_MODEL.md
 
 /Package/*
 !/Package/Assets/
@@ -19,6 +26,13 @@
 !/Tests/LAGBackendValidation.cs
 !/Tests/LinuxAvatarGuard.Validation.asmdef
 !/Tests/build_release.py
+!/Tests/LAGSecurityBaseline.cs
+!/Tests/LAGCodecValidation.cs
+!/Tests/LAGImplementationValidation.cs
+!/Tests/legacy-decoder-v1.txt
+!/Tests/LAGGpuCapture.cs
+!/Tests/LAGPreparationValidation.cs
+!/Tests/analyze_gpu_capture.py
 
 /dist/*
 !/dist/booth/
@@ -40,4 +54,8 @@
 **/private/
 **/key.json
 **/status.json
+**/keys/
+**/secrets/
+**/*.lagprivate
+**/private-manifest*
 **/*.vrca
