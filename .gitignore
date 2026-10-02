@@ -19,6 +19,8 @@
 !/docs/DYNAMIC_ATTRIBUTE_ALLOCATION.md
 !/docs/GENERATED_SHADER_FORGE.md
 !/docs/PERFORMANCE_BENCHMARK.md
+!/docs/TEXTURE_GUARD_RESEARCH.md
+!/docs/TEXTURE_GUARD_PROTOTYPE.md
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -48,6 +50,7 @@
 !/Tests/LAGAttributeValidation.cs
 !/Tests/LAGShaderForgeValidation.cs
 !/Tests/LAGPerformanceValidation.cs
+!/Tests/LAGTextureValidation.cs
 !/Tests/Performance/
 
 /dist/*

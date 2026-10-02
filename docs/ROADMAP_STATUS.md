@@ -143,6 +143,18 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Next stage:** Stage 10, investigación TextureGuard: sampling/import/mipmaps, calidad, exposición GPU y coste antes de un piloto. Mantener el gate de skinning y usar los presupuestos/métodos de Stage 9 como referencia.
 
+## Stage 10 — TextureGuard research
+
+**Status:** investigación y contrato del primer piloto entregados.
+
+**Changes:** [TEXTURE_GUARD_RESEARCH.md](TEXTURE_GUARD_RESEARCH.md) contrasta fuentes lilToon 2.3.4 y documentación primaria de Unity/VRChat. Identifica lectura de albedo/normal/emisión/máscaras, sampler compartido y providers UsePass, transferencia sRGB, importadores, mipmaps, filtrado y compresión. Propone programa tipado reproducible, payload lineal y lectura por texel en coordenadas originales, sin cambiar UV0 ni samplers compartidos.
+
+**Tests:** inspección de los includes/pases revisados por digest y definición previa de criterios medibles para Stage 11: extracción independiente, matriz Gamma/Linear y Point/Bilinear/Repeat/Clamp, calidad visual, mutaciones/rollback, dependencias del bundle y ausencia de claves serializadas. Este apartado de investigación no presenta esas pruebas como ya terminadas.
+
+**Known issues:** XOR/tile permutation son ofuscación y se pueden revertir con shader más parámetros runtime; la observabilidad GPU permanece. Normales/HDR/alfa, compresión, streaming, trilinear/anisotropía y mips requieren codecs y validación propios. El piloto inicial acepta fuentes opacas RGBA32 de un solo mip; no es una conversión automática de texturas de avatar ni una certificación del SDK/cliente.
+
+**Next stage:** Stage 11, implementar y validar el piloto de albedo opaco con los criterios anteriores. Stage 12 tratará integración contextual y ampliación de formatos; el asistente productivo conserva cero texturas protegidas.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -201,7 +213,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 7 | Dynamic attributes | Allocator estático validado: 683 comprobaciones originales, doce layouts y seis pares Vulkan. |
 | 8 | ShaderForge integration | Investigación rígida/genérica implementada: 182 comprobaciones, copias por binding/slot y clips/controllers; skinning/SDK pendientes. |
 | 9 | Performance benchmark | Benchmark rígido completado: 36 procesos, 24 rondas pareadas, 403.103 frames y recursos/ISA medidos; SDK/skinning pendientes. |
-| 10 | TextureGuard research | Pendiente; entregar investigación de sampling/import/mipmaps. |
+| 10 | TextureGuard research | Investigación entregada; contrato/restricciones del piloto y criterios de calidad definidos. |
 | 11 | TextureGuard prototype | Pendiente; piloto de albedo opaco y copias independientes. |
 | 12 | TextureGuard integration | Pendiente; ampliar por tipo de textura tras validar calidad/coste. |
 | 13 | MetadataGuard | Pendiente; preservar nombres funcionales y schema OSC legacy. |
