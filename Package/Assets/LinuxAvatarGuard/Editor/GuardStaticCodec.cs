@@ -20,13 +20,15 @@ namespace LinuxAvatarGuard
         readonly byte[] programSeed, payloadSeed;
         readonly MeshBindingIdentity binding;
         readonly float? recordedStrength;
+        readonly int[] expectedRuntimeKey;
         bool disposed;
         public StaticPolymorphicCodecV1(byte[] seed) : this(seed, seed, null) { }
-        internal StaticPolymorphicCodecV1(byte[] programSeed, byte[] payloadSeed, MeshBindingIdentity binding, float? recordedStrength = null)
+        internal StaticPolymorphicCodecV1(byte[] programSeed, byte[] payloadSeed, MeshBindingIdentity binding, float? recordedStrength = null, int[] expectedRuntimeKey = null)
         {
             if (programSeed == null || programSeed.Length != 32 || payloadSeed == null || payloadSeed.Length != 32)
                 throw new ArgumentException("Seed del prototipo inválido: se requieren 32 bytes.");
             this.programSeed = (byte[])programSeed.Clone(); this.payloadSeed = (byte[])payloadSeed.Clone(); this.binding = binding; this.recordedStrength = recordedStrength;
+            this.expectedRuntimeKey = expectedRuntimeKey == null ? null : (int[])expectedRuntimeKey.Clone();
         }
         public static StaticPolymorphicCodecV1 CreateRandom()
         {
@@ -78,6 +80,7 @@ namespace LinuxAvatarGuard
                 }
                 for (int i = instructions.Count - 1; i > 0; i--)
                 { int j = random.Next(i + 1); var t = instructions[i]; instructions[i] = instructions[j]; instructions[j] = t; }
+                ValidateKeyDependence(instructions);
                 return new CodecPlan(source, new CodecProgram(Id, Version, 2, new AttributeLayout(6, 7, 2, false), instructions.ToArray()),
                     strength, MeshBindingIdentity.ContentFingerprint(source), this, binding?.StableId);
             }
@@ -117,6 +120,17 @@ namespace LinuxAvatarGuard
             if (MeshBindingIdentity.ContentFingerprint(source) != plan.SourceFingerprint) throw new InvalidOperationException("La malla cambió después de crear el plan.");
             if (binding != null) binding.Validate();
             foreach (var instruction in plan.Program.Instructions) instruction.Validate();
+            ValidateKeyDependence(plan.Program.Instructions);
+        }
+        static void ValidateKeyDependence(IList<CodecInstruction> instructions)
+        {
+            for (int i = 1; i < instructions.Count; i++)
+            {
+                var a = instructions[i - 1]; var b = instructions[i];
+                if (a.Kind == CodecOperationKind.KeyedVectorOffset && b.Kind == a.Kind &&
+                    a.RowX + b.RowX == Vector4.zero && a.RowY + b.RowY == Vector4.zero && a.RowZ + b.RowZ == Vector4.zero)
+                    throw new InvalidOperationException("El programa cancela sus offsets keyed: crea un contexto nuevo.");
+            }
         }
         public void Validate(Mesh source, CodecPlan plan) => CheckPlan(source, plan);
         public Mesh Encode(Mesh source, CodecPlan plan, int[] runtimeKey)
@@ -124,9 +138,12 @@ namespace LinuxAvatarGuard
             CheckPlan(source, plan);
             if (runtimeKey == null || runtimeKey.Length != 4 || runtimeKey.Any(k => k < 0 || k > 255) || runtimeKey.All(k => k == 0))
                 throw new ArgumentException("Clave del prototipo inválida: cuatro bytes y al menos uno distinto de cero.");
+            if (expectedRuntimeKey != null && !runtimeKey.SequenceEqual(expectedRuntimeKey))
+                throw new ArgumentException("Los valores de codificación no coinciden con el contexto privado.");
             var key = new Vector4(runtimeKey[0], runtimeKey[1], runtimeKey[2], runtimeKey[3]) / 255f;
             var positions = source.vertices;
             var first = new List<Vector2>(positions.Length); var second = new List<Vector2>(positions.Length);
+            double missingSquaredError = 0;
             using (var random = new SeedStream(payloadSeed, "LAG/static-prototype/v1/payload"))
                 for (int i = 0; i < positions.Length; i++)
                 {
@@ -136,10 +153,15 @@ namespace LinuxAvatarGuard
                     foreach (var instruction in plan.Program.Instructions) positions[i] = instruction.Apply(positions[i], payload, key, false);
                     var roundTrip = positions[i];
                     foreach (var instruction in plan.Program.Instructions.Reverse()) roundTrip = instruction.Apply(roundTrip, payload, key, true);
+                    var absent = positions[i];
+                    foreach (var instruction in plan.Program.Instructions.Reverse()) absent = instruction.Apply(absent, payload, Vector4.zero, true);
+                    missingSquaredError += (absent - decoded).sqrMagnitude;
                     if (!Finite(positions[i].x) || !Finite(positions[i].y) || !Finite(positions[i].z) || (roundTrip - decoded).magnitude > 1e-5f)
                         throw new InvalidOperationException("El prototipo supera su presupuesto de error geométrico.");
                     first.Add(new Vector2(payload.x, payload.y)); second.Add(new Vector2(payload.z, payload.w));
                 }
+            if (Math.Sqrt(missingSquaredError / positions.Length) <= 1e-5)
+                throw new InvalidOperationException("La codificación no supera el error de reconstrucción sin clave: crea un contexto nuevo o aumenta la intensidad.");
             var result = UnityEngine.Object.Instantiate(source);
             try
             {
@@ -177,7 +199,13 @@ namespace LinuxAvatarGuard
         static string Digest(byte[] bytes)
         { using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant(); }
         public void Dispose()
-        { if (!disposed) { Array.Clear(programSeed, 0, programSeed.Length); Array.Clear(payloadSeed, 0, payloadSeed.Length); disposed = true; } }
+        {
+            if (!disposed)
+            {
+                Array.Clear(programSeed, 0, programSeed.Length); Array.Clear(payloadSeed, 0, payloadSeed.Length);
+                if (expectedRuntimeKey != null) Array.Clear(expectedRuntimeKey, 0, expectedRuntimeKey.Length); disposed = true;
+            }
+        }
         // HMAC counter stream; GuardBuildContext supplies independent HKDF-derived binding seeds.
         sealed class SeedStream : IDisposable
         {

@@ -45,11 +45,13 @@ namespace LinuxAvatarGuard
                 (record.sourceGuid != binding.SourceGuid || record.localFileId != binding.SourceLocalFileId || record.contentHash != binding.ContentHash))
                 throw new InvalidOperationException("La metadata privada no corresponde a la fuente.");
             byte[] program = null, payload = null;
+            int[] runtime = null;
             try
             {
                 program = MeshKeyDerivation.Derive(masterSeed, BuildId, binding, MeshDerivationPurpose.Program);
                 payload = MeshKeyDerivation.Derive(masterSeed, BuildId, binding, MeshDerivationPurpose.Payload);
-                var codec = new StaticPolymorphicCodecV1(program, payload, binding, record?.strength);
+                runtime = RuntimeKey();
+                var codec = new StaticPolymorphicCodecV1(program, payload, binding, record?.strength, runtime);
                 try
                 {
                     if (record != null && StaticPolymorphicCodecV1.ProgramHash(codec.Plan(binding.Source, record.strength)) != record.programHash)
@@ -59,7 +61,10 @@ namespace LinuxAvatarGuard
                 catch { codec.Dispose(); throw; }
             }
             finally
-            { if (program != null) Array.Clear(program, 0, program.Length); if (payload != null) Array.Clear(payload, 0, payload.Length); }
+            {
+                if (program != null) Array.Clear(program, 0, program.Length); if (payload != null) Array.Clear(payload, 0, payload.Length);
+                if (runtime != null) Array.Clear(runtime, 0, runtime.Length);
+            }
         }
         // Four synchronized bytes remain shared by this research build and observable at runtime.
         public int[] RuntimeKey()
@@ -93,7 +98,9 @@ namespace LinuxAvatarGuard
         public string SavePrivate()
         {
             Alive(); if (bindings.Count == 0) throw new InvalidOperationException("Registra los planes antes de guardar el contexto privado.");
-            var dto = new PrivateContext { buildId = BuildId, masterSeedBase64 = Convert.ToBase64String(masterSeed), createdUtc = CreatedUtc,
+            var dto = new PrivateContext { schemaVersion = SchemaVersion, derivationVersion = MeshKeyDerivation.Version, bindingSchema = MeshBindingIdentity.SchemaVersion,
+                codecId = StaticPolymorphicCodecV1.Id, codecVersion = StaticPolymorphicCodecV1.Version,
+                buildId = BuildId, masterSeedBase64 = Convert.ToBase64String(masterSeed), createdUtc = CreatedUtc,
                 bindings = bindings.Values.OrderBy(b => b.stableId, StringComparer.Ordinal).ToArray() };
             try { return GuardPrivateContextStore.Create(BuildId, JsonUtility.ToJson(dto, true)); }
             finally { dto.masterSeedBase64 = null; } // Managed JSON/string copies are not guaranteed to be erased.
@@ -129,8 +136,8 @@ namespace LinuxAvatarGuard
         // No public JSON/export method; this DTO is only passed to the private store.
         [Serializable] sealed class PrivateContext
         {
-            public int schemaVersion = SchemaVersion, derivationVersion = MeshKeyDerivation.Version, bindingSchema = MeshBindingIdentity.SchemaVersion;
-            public string codecId = StaticPolymorphicCodecV1.Id; public int codecVersion = StaticPolymorphicCodecV1.Version;
+            public int schemaVersion, derivationVersion, bindingSchema, codecVersion;
+            public string codecId;
             public string buildId, createdUtc, masterSeedBase64; public BindingRecord[] bindings;
         }
     }

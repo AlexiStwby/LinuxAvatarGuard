@@ -125,6 +125,8 @@ public static class LAGBindingValidation
                 var planA=first.Plan(source,.15f); var planB=second.Plan(source,.15f); var key=context.RuntimeKey();
                 Check(planA.BindingStableId==a.StableId && planB.BindingStableId==b.StableId && StaticPolymorphicCodecV1.ProgramHash(planA)!=StaticPolymorphicCodecV1.ProgramHash(planB),
                     "context plans carry binding IDs and separate programs on one shared source");
+                var mismatched=(int[])key.Clone(); mismatched[0]=(mismatched[0]+1)%256;
+                Check(Rejects(() => first.Encode(source,planA,mismatched)), "context-backed encoding refuses runtime values that would break its private restore");
                 var encoded=first.Encode(source,planA,key); allocated.Add(encoded); var encodedB=second.Encode(source,planB,key); allocated.Add(encodedB);
                 Check(!Same(encoded,encodedB), "per-binding program/payload derivation produces different encoded meshes");
                 Check(Rejects(() => context.SavePrivate()), "an empty/unregistered context cannot be persisted");
@@ -159,6 +161,10 @@ public static class LAGBindingValidation
                     File.WriteAllText(savedPath,text.Replace("\""+field+"\": 1","\""+field+"\": 99"));
                     Check(Rejects(() => GuardBuildContext.LoadPrivate(PublicBuildId)), "private restore rejects incompatible "+field);
                 }
+                File.WriteAllText(savedPath,text.Replace("\"schemaVersion\": 1,",""));
+                Check(Rejects(() => GuardBuildContext.LoadPrivate(PublicBuildId)), "private metadata with a missing schema fails closed");
+                File.WriteAllText(savedPath,text.Replace(Convert.ToBase64String(PublicSeed),Convert.ToBase64String(new byte[31])));
+                Check(Rejects(() => GuardBuildContext.LoadPrivate(PublicBuildId)), "private metadata rejects an incorrectly sized master seed");
                 File.WriteAllText(savedPath,text.Replace("\"programHash\": \"","\"programHash\": \"0"));
                 Check(Rejects(() => GuardBuildContext.LoadPrivate(PublicBuildId)), "malformed private program hashes are rejected");
                 File.WriteAllText(savedPath,text.Replace(Convert.ToBase64String(PublicSeed),Convert.ToBase64String(PublicSeed.Reverse().ToArray())));
