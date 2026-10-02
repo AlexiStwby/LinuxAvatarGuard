@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased — security foundation
+- Research-only contextual ShaderForge: per-renderer/slot materials, opaque shader families and contextual material-swap clips/controller copies; avatar preparation remains legacy.
+- Generic Animator analysis with persisted dependency fingerprints, animated ID Mask blending reservations and strict rejection of unsupported components/curves/graphs.
+- Rebuild contextual AnimatorOverrideController bindings with the public ApplyOverrides API; generated output rollback and atomic in-memory plan registration.
+- Private schema 3 for contextual policy 2, preserving historical schema 1/2 and static policy 1 reproduction.
 - Research-only dynamic UV allocation with a pinned lilToon 2.3.4/Built-in shader contract, occupied/consumer reservations and material/source mutation checks.
 - Reject unreviewed vertex streams/static batching and preserve object-space decoding through a prototype-only DisableBatching shader tag.
 - Separate HKDF layout purpose, dynamic IR schema 3 and private schema 2 with explicit fixed-layout schema 1 replay; avatar preparation remains legacy.

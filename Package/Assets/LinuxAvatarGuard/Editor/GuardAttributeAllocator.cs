@@ -18,11 +18,13 @@ namespace LinuxAvatarGuard
         public ReadOnlyCollection<int> AvailableUvChannels { get; }
         public ReadOnlyCollection<string> Reservations { get; }
         readonly MeshBindingIdentity binding;
-        internal AttributeUsageAnalysis(MeshBindingIdentity binding, string hash, int[] channels, string[] reservations)
-        { this.binding = binding; Fingerprint = hash; AvailableUvChannels = Array.AsReadOnly(channels); Reservations = Array.AsReadOnly(reservations); }
+        readonly GuardAnimationContext animation;
+        internal int Policy => animation==null ? AttributeAllocator.PolicyVersion : AttributeAllocator.ContextualPolicyVersion;
+        internal AttributeUsageAnalysis(MeshBindingIdentity binding, string hash, int[] channels, string[] reservations, GuardAnimationContext animation=null)
+        { this.binding = binding; this.animation=animation; Fingerprint = hash; AvailableUvChannels = Array.AsReadOnly(channels); Reservations = Array.AsReadOnly(reservations); }
         public void Validate()
         {
-            if (AttributeAllocator.Inspect(binding).Fingerprint != Fingerprint)
+            if (AttributeAllocator.Inspect(binding,animation).Fingerprint != Fingerprint)
                 throw new InvalidOperationException("Cambió el uso de atributos/materiales/shaders después del análisis. Crea un plan nuevo.");
         }
     }
@@ -31,6 +33,7 @@ namespace LinuxAvatarGuard
     public static class AttributeAllocator
     {
         public const int PolicyVersion = 1;
+        public const int ContextualPolicyVersion = 2;
         public const string ReviewedShaderDigest = "46fda1de8dedeb5f57c58ab069a4c66b6937b867cb55dec54f73c987d344d892";
         static readonly Dictionary<string, string> shaders = new Dictionary<string, string> {
             { "lilToon", "lts.shader" }, { "Hidden/lilToonOutline", "lts_o.shader" },
@@ -48,22 +51,22 @@ namespace LinuxAvatarGuard
             if (forbiddenKeywords.Any(Shader.IsKeywordEnabled))
                 throw new InvalidOperationException("Keyword global de posición/velocidad previa incompatible con carriers UV4/UV5.");
         }
-        static void RequireStaticContext(GameObject root, Renderer renderer)
+        static void RequireStaticContext(GameObject root, Renderer renderer, GuardAnimationContext animation)
         {
             var meshRenderer = (MeshRenderer)renderer;
             if (meshRenderer.additionalVertexStreams || meshRenderer.enlightenVertexStream || renderer.isPartOfStaticBatch)
                 throw new InvalidOperationException("Vertex streams/batching adicionales no analizados: se cancela la asignación.");
             // Even disabled controllers/scripts can later change materials or their semantic properties.
             for (var node = root.transform; node; node = node.parent)
-                RequireUnanimated(node.gameObject);
-            foreach (var node in root.GetComponentsInChildren<Transform>(true)) RequireUnanimated(node.gameObject);
+                RequireUnanimated(node.gameObject,animation);
+            foreach (var node in root.GetComponentsInChildren<Transform>(true)) RequireUnanimated(node.gameObject,animation);
             if (renderer.HasPropertyBlock()) throw new InvalidOperationException("MaterialPropertyBlock no analizado: se cancela la asignación.");
         }
-        static void RequireUnanimated(GameObject obj)
+        static void RequireUnanimated(GameObject obj, GuardAnimationContext animation)
         {
             if ((GameObjectUtility.GetStaticEditorFlags(obj) & StaticEditorFlags.BatchingStatic) != 0)
                 throw new InvalidOperationException("Static batching no conserva el contrato de posiciones del codec experimental.");
-            if (obj.GetComponent<Animator>() || obj.GetComponent<Animation>() || obj.GetComponent<PlayableDirector>() || obj.GetComponents<MonoBehaviour>().Length != 0)
+            if ((obj.GetComponent<Animator>() && (animation==null || obj.GetComponent<Animator>()!=animation.Animator)) || obj.GetComponent<Animation>() || obj.GetComponent<PlayableDirector>() || obj.GetComponents<MonoBehaviour>().Length != 0)
                 throw new InvalidOperationException("El allocator estático no analiza Animator, Animation, Timeline ni scripts. Integración contextual pendiente.");
         }
         static string ReviewSources(Shader shader)
@@ -140,14 +143,17 @@ namespace LinuxAvatarGuard
                 }
             }
         }
-        public static AttributeUsageAnalysis Inspect(MeshBindingIdentity binding)
+        public static AttributeUsageAnalysis Inspect(MeshBindingIdentity binding) => Inspect(binding,null);
+        internal static AttributeUsageAnalysis Inspect(MeshBindingIdentity binding, GuardAnimationContext animation)
         {
             RequireEnvironment();
             if (binding == null) throw new ArgumentNullException(nameof(binding));
-            binding.Validate(); RequireStaticContext(binding.Root, binding.Renderer);
+            if(animation!=null){if(animation.Root!=binding.Root)throw new ArgumentException("Contexto de animación de otra raíz.");animation.Validate();}
+            binding.Validate(); RequireStaticContext(binding.Root, binding.Renderer,animation);
             var mesh = binding.Source; var materials = binding.Renderer.sharedMaterials;
             if (materials.Length == 0 || materials.Length != mesh.subMeshCount || materials.Any(m => !m))
                 throw new InvalidOperationException("Se requiere un material persistente por submesh, sin slots vacíos/adicionales.");
+            if(animation!=null)materials=animation.Materials(binding.Renderer);
             var available = new HashSet<int>(new[] { 4, 5, 6, 7 });
             var reserved = new List<string> { "UV0–3: lilToon shading/decals/AudioLink; colors/tangents: preserved" };
             foreach (int channel in available.ToArray())
@@ -157,7 +163,8 @@ namespace LinuxAvatarGuard
             {
                 using (var output = new BinaryWriter(stream, Encoding.UTF8, true))
                 {
-                    output.Write("LAG/attribute-policy/v1"); output.Write(PolicyVersion); output.Write(binding.StableId);
+                    output.Write(animation==null ? "LAG/attribute-policy/v1" : "LAG/attribute-policy/v2"); output.Write(animation==null ? PolicyVersion : ContextualPolicyVersion); output.Write(binding.StableId);
+                    if(animation!=null)output.Write(animation.Fingerprint);
                     output.Write(Application.unityVersion); output.Write(materials.Length);
                     foreach (var material in materials)
                     {
@@ -171,8 +178,11 @@ namespace LinuxAvatarGuard
                         SnapshotMaterial(output, material);
                     }
                     foreach (int channel in available.OrderBy(c => c)) output.Write(channel);
+                    if(animation!=null)foreach(int channel in animation.ReservedSelectors(binding.Renderer))
+                        if(channel>=4&&channel<=7){available.Remove(channel);reserved.Add("UV"+channel+": animated ID Mask/blend range");}
+                    if(animation!=null){output.Write(-1);foreach(int channel in available.OrderBy(c=>c))output.Write(channel);}
                 }
-                return new AttributeUsageAnalysis(binding, MeshBindingIdentity.Digest(stream.ToArray()), available.OrderBy(c => c).ToArray(), reserved.ToArray());
+                return new AttributeUsageAnalysis(binding, MeshBindingIdentity.Digest(stream.ToArray()), available.OrderBy(c => c).ToArray(), reserved.ToArray(),animation);
             }
         }
         // Layout seed is supplied only by the private context's separate HKDF purpose (4).
@@ -184,7 +194,7 @@ namespace LinuxAvatarGuard
                 var bytes = new byte[layoutSeed.Length + 1]; Array.Copy(layoutSeed, bytes, layoutSeed.Length); bytes[bytes.Length - 1] = (byte)channel;
                 try { return MeshBindingIdentity.Digest(bytes); } finally { Array.Clear(bytes, 0, bytes.Length); }
             }, StringComparer.Ordinal).ThenBy(c => c).ToArray();
-            return new AttributeLayout(ordered[0], ordered[1], 2, false, PolicyVersion);
+            return new AttributeLayout(ordered[0], ordered[1], 2, false, usage.Policy);
         }
     }
 }

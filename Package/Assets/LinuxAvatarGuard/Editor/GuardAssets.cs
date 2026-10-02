@@ -14,16 +14,37 @@ namespace LinuxAvatarGuard
     {
         readonly string folder;
         readonly GuardShaders shaders;
+        readonly Func<AnimationClip,AnimationClip> contextualClip;
         readonly Dictionary<Object, Object> objects = new Dictionary<Object, Object>();
         readonly Dictionary<string, string> files = new Dictionary<string, string>();
-        public GuardAssets(string folder, GuardShaders shaders) { this.folder = folder; this.shaders = shaders; }
+        public GuardAssets(string folder, GuardShaders shaders) : this(folder,shaders,null) { }
+        internal GuardAssets(string folder, GuardShaders shaders, Func<AnimationClip,AnimationClip> contextualClip)
+        { this.folder = folder; this.shaders = shaders; this.contextualClip=contextualClip; }
         public void Register(Object original, Object copy) { objects[original] = copy; }
         public Object Copy(Object original)
         {
             if (!original) return original;
             if (objects.TryGetValue(original, out var copy)) return copy;
+            if(original is AnimationClip contextual && contextualClip!=null)
+            {var result=contextualClip(contextual);objects.Add(original,result);return result;}
+            if(original is AnimatorOverrideController overrides && contextualClip!=null)
+            {
+                var result=new AnimatorOverrideController {name="a_"+AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(original))};
+                try
+                {
+                    objects.Add(original,result);
+                    result.runtimeAnimatorController=(RuntimeAnimatorController)Copy(overrides.runtimeAnimatorController);
+                    var pairs=new List<KeyValuePair<AnimationClip,AnimationClip>>();overrides.GetOverrides(pairs);
+                    var mapped=new List<KeyValuePair<AnimationClip,AnimationClip>>();
+                    foreach(var pair in pairs)mapped.Add(new KeyValuePair<AnimationClip,AnimationClip>((AnimationClip)Copy(pair.Key),(AnimationClip)Copy(pair.Value)));
+                    // The public API rebuilds native override bindings; SerializedObject alone leaves stale clip caches.
+                    result.ApplyOverrides(mapped);AssetDatabase.CreateAsset(result,folder+"/"+result.name+".overrideController");return result;
+                }
+                catch{objects.Remove(original);if(!AssetDatabase.Contains(result))Object.DestroyImmediate(result);throw;}
+            }
             if (original is Material material)
             {
+                if(contextualClip!=null)throw new InvalidOperationException("Material contextual sin binding/slot: se cancela la copia del controller.");
                 var m = new Material(material) { shader = shaders.Copy(material.shader), name = material.name + "_LAG" };
                 m.renderQueue = material.renderQueue;
                 for (int i = 0; i < 4; i++) m.SetFloat(GuardShaders.Property(i), 0);
@@ -48,12 +69,15 @@ namespace LinuxAvatarGuard
                 var originals = AssetDatabase.LoadAllAssetsAtPath(source);
                 if (Array.Exists(originals, item => item && EditorUtility.IsDirty(item)))
                     throw new InvalidOperationException("Guarda primero los cambios de animación del avatar de trabajo: " + source);
-                target = AssetDatabase.GenerateUniqueAssetPath(folder + "/" + Path.GetFileName(source));
+                string filename=contextualClip==null ? Path.GetFileName(source) : "a_"+AssetDatabase.AssetPathToGUID(source)+Path.GetExtension(source);
+                target = AssetDatabase.GenerateUniqueAssetPath(folder + "/" + filename);
                 // CopyAsset can flush unrelated dirty assets. Import a new file with a fresh GUID instead.
                 File.Copy(Path.GetFullPath(source), Path.GetFullPath(target));
                 AssetDatabase.ImportAsset(target, ImportAssetOptions.ForceSynchronousImport);
                 files.Add(source, target);
                 var copies = AssetDatabase.LoadAllAssetsAtPath(target);
+                if(contextualClip!=null)
+                    foreach(var item in copies)if(item&&AssetDatabase.IsMainAsset(item))item.name=Path.GetFileNameWithoutExtension(target);
                 foreach (var item in originals)
                 {
                     if (!item) continue;

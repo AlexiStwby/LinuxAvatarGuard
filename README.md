@@ -36,6 +36,8 @@ La [derivación por malla/binding](docs/PER_MESH_DERIVATION.md) separa programas
 
 La [evaluación de 100 builds sintéticos](docs/CODEC_DIVERSITY_RESULTS.md) mide diversidad, reapertura de bundles, renders y extracción adaptativa. Detectó y corrigió la aceptación de un programa sin dependencia de clave. La [asignación dinámica de atributos](docs/DYNAMIC_ATTRIBUTE_ALLOCATION.md) elige dos UV demostrablemente libres entre los índices 4–7, con contrato lilToon revisado, validación de mutaciones y respaldos compatibles. Las pruebas cubren doce layouts y seis pares en bundles Vulkan; el extractor adaptativo sigue reconstruyendo la geometría. Estos cambios todavía no habilitan el codec nuevo en el asistente.
 
+El [ShaderForge contextual](docs/GENERATED_SHADER_FORGE.md) añade copias por renderer/slot y remapea los cambios de material de clips/controllers de un Animator genérico. Sigue limitado a mallas rígidas de investigación; el asistente utiliza la ruta de avatares ya validada.
+
 Pruebas OSC, desde la raíz del repositorio:
 
 ```sh

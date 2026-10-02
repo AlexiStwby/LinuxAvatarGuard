@@ -6,7 +6,7 @@ Fecha: 2026-10-02. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `Li
 
 El roadmap identifica correctamente la necesidad de diversidad, validación y trazabilidad. El codec actual puede ser reconstruido con una fórmula estable si se conocen sus cuatro parámetros. La baseline añadida reproduce esa debilidad; no constituye una nueva protección.
 
-La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos para fixtures estáticas. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. TextureGuard, fingerprints e integración productiva del codec nuevo siguen pendientes.
+La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos estáticos; Stage 8 añade ShaderForge contextual para raíces rígidas con Animator genérico. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. TextureGuard, fingerprints, skinning e integración productiva del codec nuevo siguen pendientes.
 
 El análisis GPU se limita a Unity y aplicaciones de prueba propias por instrucción del usuario. RenderDoc se descargó con su permiso; no se realiza análisis GPU sobre VRChat.
 
@@ -117,6 +117,20 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Next stage:** Stage 8, Generated Shader Forge contextual por renderer/material slot/clips, cambios de material y propiedades animadas, providers/configuración y gates verificables antes de integración productiva.
 
+## Stage 8 — Generated ShaderForge
+
+**Status:** implementado y validado como API de investigación rígida/genérica. El asistente conserva legacy; integración de avatares skinned/SDK pendiente.
+
+**Changes:** [GuardShaderForge.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardShaderForge.cs) genera una copia independiente con familias de shaders por binding, materiales por renderer/slot y remapeo contextual de clips/controllers/BlendTrees/overrides. Nombres opacos, providers explícitos, licencia preservada, comprobación de shaders y rollback de carpeta nueva; registro de planes por lote. [GuardAnimationContext.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardAnimationContext.cs) analiza identidades/archivos, swaps y propiedades animadas, reserva intervalos de ID Mask durante mezclas y rechaza grafos/bindings fuera del contrato. Override controllers reconstruidos mediante API pública para actualizar bindings nativos. Política contextual 2 y schema privado 3; reproducción de schemas 1/2 y política estática 1 conservada. Contrato/API: [GENERATED_SHADER_FORGE.md](GENERATED_SHADER_FORGE.md).
+
+**Tests:** 182 comprobaciones correctas de [LAGShaderForgeValidation.cs](../Tests/LAGShaderForgeValidation.cs). Dos contextos, cuatro bindings, 16 shaders/provider assets, dos bundles Linux Vulkan cargados y dos Windows64 compilados. Clips/slots compartidos, BlendTrees 1D anidados, override con movimientos invertidos, persistencia/downgrade, mutaciones y fallo tardío durante importación. El Animator se inicializa, avanza y produce la pose analítica esperada; los clips nativos sin modificaciones reproducen el resultado bloqueado de los templates. 64 imágenes: 20 comparaciones original/desbloqueado/bloqueado y dos comparaciones adicionales de Animator. Diferencia desbloqueada máxima **0**, bloqueada mínima **≈ 0,04395888**. Originales y fuentes lilToon byte idénticos. Cross-renderer decoder RMS mínimo **≈ 0,7727544**; extractor adaptativo recupera los cuatro bindings, error máximo **≈ 7,0021 × 10⁻⁸**.
+
+**Regressions:** 684 comprobaciones Stage 7 (una nueva verifica schema 2 histórico) + 53 de binding + 44 del prototipo + 83 de implementación = **864**, todas correctas. Backend adicional: 13 shaders en bundle Windows64, separado del conteo de pruebas. Importación/API y reproducción privada fija schema 3 correctas en proyecto sin SDK ni lilToon. Total de comprobaciones contadas de esta iteración: **1.046**. Evidencias locales: `evidence/shader-forge/validation.json`, PNG/bundles/`sdk-free.json`; logs `evidence/shader-forge-validation-final.log`, `shader-forge-regression-final.log`, `shader-forge-sdk-free-final.log`.
+
+**Known issues:** mallas skinned/blendshapes, SDK, sincronización/OSC/FX productivos y performance pendientes. El contrato incluye 2D simple, pero la primera matriz visual solo ejecuta 1D. Renders unlit/mono con filtro de variantes de fixture; Windows se compila sin afirmar ejecución D3D. Las claves solo se añaden a clips/controllers temporales de prueba con templates editables y materiales del bundle; se destruyen y nunca se guardan. Unity elimina metadata de edición de curvas en bundles, y el API no intenta modificarlos como assets de autoría. Se conservan warnings de objetos BlendTree editor-only convertidos por el builder y JobTempAlloc al cierre; no certifican el coste ni descartan problemas de rendimiento. HLSL más valores runtime permiten extracción adaptativa y PostVS sigue observable.
+
+**Next stage:** Stage 9, benchmark original/legacy/contextual en fixtures propias y hardware fijo: CPU/GPU, VRAM, draw calls, variantes, tamaños/tiempos de build y presupuestos. Mantener el gate de skinning hasta una validación específica; ninguna captura/análisis se realizará en VRChat.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -172,8 +186,8 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 4 | Polymorphic prototype | Implementado como API estática opt-in; 44 comprobaciones y captura GPU en Unity. |
 | 5 | Per-mesh derivation | Implementado para estático; 53 comprobaciones y contexto privado reproducible. |
 | 6 | Diversity tests | 100 builds estáticos completos + extractor; 2.714 comprobaciones; SDK/animación pendientes. |
-| 7 | Dynamic attributes | Investigación lilToon/criterios entregados; allocator y matriz positiva pendientes. |
-| 8 | ShaderForge integration | Planificado; remapeo contextual, pases y variantes lilToon. |
+| 7 | Dynamic attributes | Allocator estático validado: 683 comprobaciones originales, doce layouts y seis pares Vulkan. |
+| 8 | ShaderForge integration | Investigación rígida/genérica implementada: 182 comprobaciones, copias por binding/slot y clips/controllers; skinning/SDK pendientes. |
 | 9 | Performance benchmark | Pendiente; medir original/legacy/nuevo y fijar presupuestos. |
 | 10 | TextureGuard research | Pendiente; entregar investigación de sampling/import/mipmaps. |
 | 11 | TextureGuard prototype | Pendiente; piloto de albedo opaco y copias independientes. |

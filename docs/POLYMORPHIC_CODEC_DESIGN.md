@@ -1,6 +1,6 @@
 # Diseño del codec y migración
 
-Estado: diseño de evolución. Contrato legacy, prototipo estático y derivación/contexto por binding implementados. Carriers dinámicos e integración productiva pendientes. Fecha: 2026-10-02. Contrato de Stage 5 en [PER_MESH_DERIVATION.md](PER_MESH_DERIVATION.md).
+Estado: diseño de evolución. Contrato legacy, prototipo estático, derivación por binding, carriers dinámicos y ShaderForge contextual rígido/genérico implementados como investigación. Integración productiva y skinning pendientes. Fecha: 2026-10-02. Contratos de Stage 5 en [PER_MESH_DERIVATION.md](PER_MESH_DERIVATION.md), Stage 7 en [DYNAMIC_ATTRIBUTE_ALLOCATION.md](DYNAMIC_ATTRIBUTE_ALLOCATION.md) y Stage 8 en [GENERATED_SHADER_FORGE.md](GENERATED_SHADER_FORGE.md).
 
 ## Objetivo y límites
 

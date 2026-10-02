@@ -11,7 +11,7 @@ namespace LinuxAvatarGuard
     // Research context, not a GuardProfile and never an avatar upload readiness certificate.
     public sealed class GuardBuildContext : IDisposable
     {
-        public const int SchemaVersion = 2;
+        public const int SchemaVersion = 3;
         public string BuildId { get; }
         public string CreatedUtc { get; }
         readonly byte[] masterSeed;
@@ -37,10 +37,12 @@ namespace LinuxAvatarGuard
         public static GuardBuildContext CreateReproducible(string buildId, byte[] masterSeed) =>
             new GuardBuildContext(buildId, masterSeed, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), false);
         void Alive() { if (disposed) throw new ObjectDisposedException(nameof(GuardBuildContext)); }
-        // Recorded schema 2 bindings reproduce their allocation; new bindings retain the fixed route by default.
+        // Recorded bindings reproduce their policy; contextual records require the same animation analysis.
         public StaticPolymorphicCodecV1 CreateCodec(MeshBindingIdentity binding) => CreateCodecCore(binding, false);
         public StaticPolymorphicCodecV1 CreateDynamicCodec(MeshBindingIdentity binding) => CreateCodecCore(binding, true);
-        StaticPolymorphicCodecV1 CreateCodecCore(MeshBindingIdentity binding, bool dynamicAttributes)
+        public StaticPolymorphicCodecV1 CreateContextualCodec(MeshBindingIdentity binding, GuardAnimationContext animation)
+        {if(animation==null)throw new ArgumentNullException(nameof(animation));return CreateCodecCore(binding,true,animation);}
+        StaticPolymorphicCodecV1 CreateCodecCore(MeshBindingIdentity binding, bool dynamicAttributes, GuardAnimationContext animation=null)
         {
             Alive(); if (binding == null) throw new ArgumentNullException(nameof(binding)); binding.Validate();
             if (restored && !bindings.ContainsKey(binding.StableId)) throw new InvalidOperationException("El binding no pertenece al contexto privado restaurado.");
@@ -50,6 +52,8 @@ namespace LinuxAvatarGuard
             if (record != null && dynamicAttributes && record.attributePolicy == 0)
                 throw new InvalidOperationException("Un binding privado fijo no puede reinterpretarse como dinámico.");
             dynamicAttributes |= record != null && record.attributePolicy != 0;
+            if(record!=null && ((record.attributePolicy==AttributeAllocator.ContextualPolicyVersion)!=(animation!=null)))
+                throw new InvalidOperationException("El registro contextual requiere su análisis de animación; no puede cambiar de política.");
             byte[] program = null, payload = null, layoutSeed = null;
             int[] runtime = null;
             try
@@ -60,7 +64,7 @@ namespace LinuxAvatarGuard
                 AttributeUsageAnalysis usage = null; AttributeLayout layout = null;
                 if (dynamicAttributes)
                 {
-                    usage = AttributeAllocator.Inspect(binding);
+                    usage = AttributeAllocator.Inspect(binding,animation);
                     layoutSeed = MeshKeyDerivation.Derive(masterSeed, BuildId, binding, MeshDerivationPurpose.AttributeLayout);
                     layout = AttributeAllocator.Allocate(usage, layoutSeed);
                     if (record != null && (record.usageHash != usage.Fingerprint || record.firstUv != layout.FirstUvChannel || record.secondUv != layout.SecondUvChannel))
@@ -93,13 +97,13 @@ namespace LinuxAvatarGuard
             }
             finally { Array.Clear(bytes, 0, bytes.Length); }
         }
-        public void RecordPlan(MeshBindingIdentity binding, CodecPlan plan)
+        public void RecordPlan(MeshBindingIdentity binding, CodecPlan plan, GuardAnimationContext animation=null)
         {
             Alive(); if (binding == null || plan == null || plan.BindingStableId != binding.StableId || plan.Source != binding.Source)
                 throw new ArgumentException("El plan no corresponde al binding.");
             binding.Validate();
             // Reproduce the expected program instead of trusting a caller's program/hash.
-            using (var expected = CreateCodecCore(binding, plan.Program.Attributes.PolicyVersion != 0))
+            using (var expected = CreateCodecCore(binding, plan.Program.Attributes.PolicyVersion != 0,animation))
             {
                 var hash = StaticPolymorphicCodecV1.ProgramHash(plan);
                 if (hash != StaticPolymorphicCodecV1.ProgramHash(expected.Plan(binding.Source, plan.Strength)))
@@ -112,6 +116,12 @@ namespace LinuxAvatarGuard
                     throw new InvalidOperationException("Un binding ya registrado no puede cambiar dentro del mismo BuildID.");
                 bindings[binding.StableId] = record;
             }
+        }
+        internal void RecordPlans(IEnumerable<Tuple<MeshBindingIdentity,CodecPlan>> plans,GuardAnimationContext animation)
+        {
+            var before=new Dictionary<string,BindingRecord>(bindings);
+            try{foreach(var p in plans)RecordPlan(p.Item1,p.Item2,animation);}
+            catch{bindings.Clear();foreach(var p in before)bindings.Add(p.Key,p.Value);throw;}
         }
         public string SavePrivate()
         {
@@ -126,7 +136,7 @@ namespace LinuxAvatarGuard
         public static GuardBuildContext LoadPrivate(string buildId)
         {
             var dto = JsonUtility.FromJson<PrivateContext>(GuardPrivateContextStore.Read(buildId));
-            if (dto == null || (dto.schemaVersion != 1 && dto.schemaVersion != SchemaVersion) || dto.derivationVersion != MeshKeyDerivation.Version ||
+            if (dto == null || (dto.schemaVersion != 1 && dto.schemaVersion != 2 && dto.schemaVersion != SchemaVersion) || dto.derivationVersion != MeshKeyDerivation.Version ||
                 dto.codecId != StaticPolymorphicCodecV1.Id || dto.codecVersion != StaticPolymorphicCodecV1.Version || dto.buildId != buildId ||
                 dto.bindingSchema != MeshBindingIdentity.SchemaVersion || dto.bindings == null || dto.bindings.Length == 0 || dto.bindings.Length > 4096)
                 throw new InvalidOperationException("Schema/codec/contexto privado incompatible.");
@@ -150,7 +160,7 @@ namespace LinuxAvatarGuard
                         b.firstUv = 6; b.secondUv = 7; b.components = 2;
                     }
                     if (b.components != 2 || (b.attributePolicy == 0 ? b.firstUv != 6 || b.secondUv != 7 || !string.IsNullOrEmpty(b.usageHash) :
-                        b.attributePolicy != AttributeAllocator.PolicyVersion || b.firstUv < 4 || b.firstUv > 7 || b.secondUv < 4 || b.secondUv > 7 ||
+                        (b.attributePolicy != AttributeAllocator.PolicyVersion && (b.attributePolicy != AttributeAllocator.ContextualPolicyVersion || dto.schemaVersion<3)) || b.firstUv < 4 || b.firstUv > 7 || b.secondUv < 4 || b.secondUv > 7 ||
                         b.firstUv == b.secondUv || !MeshKeyDerivation.IsHex(b.usageHash, 64)))
                         throw new InvalidOperationException("Layout/política de atributos privada incompatible.");
                     context.bindings.Add(b.stableId, b);

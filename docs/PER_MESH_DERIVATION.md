@@ -4,6 +4,8 @@ Fecha: 2026-10-02. API de investigación en `main`, sin nueva release. El asiste
 
 Este documento registra la entrega de Stage 5. [Stage 7](DYNAMIC_ATTRIBUTE_ALLOCATION.md) añade el propósito HKDF 4 para layout, `CreateDynamicCodec`, IR schema 3 y contexto privado schema 2. Los dominios previos y programas fijos conservan sus bytes; la lectura histórica de schema 1 mantiene UV6/UV7 explícitos.
 
+[Stage 8](GENERATED_SHADER_FORGE.md) añade `CreateContextualCodec`, política contextual 2 y escritura privada schema 3. Los registros anteriores se siguen leyendo y reproduciendo; un registro contextual requiere el mismo análisis de animación.
+
 ## Identidad y derivación
 
 [MeshBindingIdentity](../Package/Assets/LinuxAvatarGuard/Editor/GuardMeshIdentity.cs) captura la fuente antes de clonar/codificar. Combina GUID y localFileID del asset, huella canónica de contenido, segmentos relativos de jerarquía con nombre e índice de hermano, tipo e índice del componente renderer. Campos con longitud/tipo mediante `BinaryWriter`, hash SHA-256. Nombres duplicados, nombres con `/` y subassets no se identifican solo por el nombre.

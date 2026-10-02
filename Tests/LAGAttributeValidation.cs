@@ -133,14 +133,17 @@ public static class LAGAttributeValidation
                 try
                 {
                     string path=context.SavePrivate(),original=File.ReadAllText(path);
-                    Check(original.Contains("\"schemaVersion\": 2")&&original.Contains("\"attributePolicy\": 1"),"private schema 2 explicitly records dynamic policy/layout");
+                    Check(original.Contains("\"schemaVersion\": "+GuardBuildContext.SchemaVersion)&&original.Contains("\"attributePolicy\": 1"),"current private schema explicitly records dynamic policy/layout");
                     using(var restored=GuardBuildContext.LoadPrivate(context.BuildId)) using(var repeated=restored.CreateCodec(bnd))
                     {
                         var p=repeated.Plan(mesh,.15f);var copy=repeated.Encode(mesh,p,restored.RuntimeKey());
                         try {Check(Layout(p)==Layout(plan)&&p.AttributeUsageHash==plan.AttributeUsageHash&&MeshBindingIdentity.ContentFingerprint(copy)==MeshBindingIdentity.ContentFingerprint(encoded),"disk restore exactly reproduces dynamic layout, usage hash and mesh");}
                         finally{Object.DestroyImmediate(copy);}
                     }
-                    foreach(var change in new[]{original.Replace("\"attributePolicy\": 1","\"attributePolicy\": 99"),original.Replace("\"components\": 2","\"components\": 4"),Regex.Replace(original,@"""firstUv"": [4-7]","\"firstUv\": 0"),original.Replace("\"schemaVersion\": 2","\"schemaVersion\": 1")})
+                    File.WriteAllText(path,original.Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion,"\"schemaVersion\": 2"));
+                    using(var old=GuardBuildContext.LoadPrivate(context.BuildId))using(var repeated=old.CreateCodec(bnd))
+                        Check(StaticPolymorphicCodecV1.ProgramHash(repeated.Plan(mesh,.15f))==StaticPolymorphicCodecV1.ProgramHash(plan),"historical private schema 2 reproduces the same policy 1 program");
+                    foreach(var change in new[]{original.Replace("\"attributePolicy\": 1","\"attributePolicy\": 99"),original.Replace("\"components\": 2","\"components\": 4"),Regex.Replace(original,@"""firstUv"": [4-7]","\"firstUv\": 0"),original.Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion,"\"schemaVersion\": 1")})
                     {File.WriteAllText(path,change);Check(Rejects(()=>GuardBuildContext.LoadPrivate(context.BuildId)),"malformed/downgraded private allocation is rejected");}
                     File.WriteAllText(path,original.Replace(plan.AttributeUsageHash,Hash(Seed("tampered-usage"))));
                     Check(Rejects(()=>{using(var restored=GuardBuildContext.LoadPrivate(context.BuildId))using(var unused=restored.CreateCodec(bnd)) {}}),"tampered valid-length usage hash fails replay");File.WriteAllText(path,original);
@@ -174,7 +177,7 @@ public static class LAGAttributeValidation
             }
             using(var fixedContext=GuardBuildContext.CreateReproducible(Hash(Seed("schema1-id")).Substring(0,32),Seed("schema1-seed")))using(var fixedCodec=fixedContext.CreateCodec(bnd))
             {
-                var plan=fixedCodec.Plan(mesh,.15f);fixedContext.RecordPlan(bnd,plan);var path=fixedContext.SavePrivate();var text=File.ReadAllText(path).Replace("\"schemaVersion\": 2","\"schemaVersion\": 1");
+                var plan=fixedCodec.Plan(mesh,.15f);fixedContext.RecordPlan(bnd,plan);var path=fixedContext.SavePrivate();var text=File.ReadAllText(path).Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion,"\"schemaVersion\": 1");
                 text=Regex.Replace(text,@"(?m)^\s*""(?:firstUv|secondUv|components|attributePolicy|usageHash)"":.*\n?","");text=Regex.Replace(text,@",\s*}","\n}");File.WriteAllText(path,text);
                 using(var restored=GuardBuildContext.LoadPrivate(fixedContext.BuildId))using(var old=restored.CreateCodec(bnd))
                 {var p=old.Plan(mesh,.15f);Check(p.Program.SchemaVersion==2&&Layout(p)=="6,7"&&p.Program.Attributes.PolicyVersion==0&&StaticPolymorphicCodecV1.ProgramHash(p)==StaticPolymorphicCodecV1.ProgramHash(plan),"historical schema 1 without allocation fields reproduces fixed UV6/UV7 and unchanged program hash");Check(Rejects(()=>{using(var unused=restored.CreateDynamicCodec(bnd)) {}}),"schema 1 cannot silently become dynamic");}

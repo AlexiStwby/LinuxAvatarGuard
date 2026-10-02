@@ -17,6 +17,7 @@
 !/docs/PER_MESH_DERIVATION.md
 !/docs/DYNAMIC_ATTRIBUTE_RESEARCH.md
 !/docs/DYNAMIC_ATTRIBUTE_ALLOCATION.md
+!/docs/GENERATED_SHADER_FORGE.md
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -44,6 +45,7 @@
 !/Tests/LAGDiversityValidation.cs
 !/Tests/LAGDiversityVariantFilter.cs
 !/Tests/LAGAttributeValidation.cs
+!/Tests/LAGShaderForgeValidation.cs
 
 /dist/*
 !/dist/booth/
