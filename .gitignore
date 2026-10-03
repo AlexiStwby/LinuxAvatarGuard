@@ -23,6 +23,7 @@
 !/docs/TEXTURE_GUARD_PROTOTYPE.md
 !/docs/TEXTURE_GUARD_INTEGRATION.md
 !/docs/MIP_SKIN_RESEARCH.md
+!/docs/METADATA_GUARD.md
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -57,6 +58,10 @@
 !/Tests/LAGTextureIntegrationImportSmoke.cs
 !/Tests/LAGSkinningCharacterization.cs
 !/Tests/LAGMipSkinValidation.cs
+!/Tests/LAGMetadataValidation.cs
+!/Tests/LAGMetadataImportSmoke.cs
+!/Tests/LAGMetadataSdkValidation.cs
+!/Tests/Metadata/
 !/Tests/Performance/
 
 /dist/*
@@ -83,4 +88,6 @@
 **/secrets/
 **/*.lagprivate
 **/private-manifest*
+**/metadata-map.json
+**/*.metadata.json
 **/*.vrca

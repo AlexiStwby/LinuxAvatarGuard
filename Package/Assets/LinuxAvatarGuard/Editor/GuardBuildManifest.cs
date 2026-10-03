@@ -21,6 +21,8 @@ namespace LinuxAvatarGuard
         public int rendererCount, protectedMeshes, protectedTextures, syncedBits = 32;
         public int[] payloadUvChannels = { 6, 7 };
         public bool experimentalSkinning;
+        public int metadataGuardVersion, renamedMetadataAssets, renamedMetadataFiles;
+        public string metadataPolicy;
     }
 
     public static class GuardBuildManifest

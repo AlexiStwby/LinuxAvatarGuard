@@ -46,6 +46,8 @@ La [integración contextual de TextureGuard](docs/TEXTURE_GUARD_INTEGRATION.md) 
 
 La [continuación de mipmaps y skinning](docs/MIP_SKIN_RESEARCH.md) añade una pirámide de albedo con niveles codificados por separado, filtros Point/Bilinear/Trilinear y un codec lineal específico para huesos y blendshapes. `PrepareWithFeatures` combina mallas rígidas/skinned de un Animator genérico en copias auditadas; el respaldo schema 5 sigue leyendo schemas 1–4. La validación utiliza bundles y players propios Linux/Vulkan con GPU Skinning habilitado y deshabilitado. La integración con avatares Humanoid/SDK, culling completo, calidad dinámica y rendimiento de esta ruta aún requieren pruebas antes de llevarla al asistente.
 
+[MetadataGuard (etapa 13)](docs/METADATA_GUARD.md) añade copias de metadatos con aliases por build, respaldo privado y rollback. Su modo conservador mantiene los nombres funcionales de VRChat; las selecciones internas genéricas remapean curvas, morphs, parámetros, máscaras y overrides de forma conjunta. `PrepareWithMetadata` integra únicamente labels/archivos sobre MeshGuard legacy como opt-in. La ruta predeterminada y la descarga 0.2.1 siguen siendo las publicadas. Los nombres ofuscados no impiden una extracción adaptativa o GPU.
+
 Pruebas OSC, desde la raíz del repositorio:
 
 ```sh

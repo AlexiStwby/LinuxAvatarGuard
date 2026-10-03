@@ -252,6 +252,20 @@ La primera regresión completó sus aserciones y luego esperó trabajo asíncron
 
 **Next stage:** ampliar las pruebas de avatar/culling y medir esta ruta; preparar integración y exportación de una nueva release únicamente después de sus gates. Las demás etapas 13–25 del roadmap continúan según la tabla.
 
+## Stage 13 — MetadataGuard
+
+**Status:** implementado como capa opt-in con contrato conservador. [METADATA_GUARD.md](METADATA_GUARD.md) especifica nombres admitidos, exclusiones, privacidad y reproducción. La ruta predeterminada del asistente y los binarios 0.2.1 conservan su comportamiento.
+
+**Changes:** `GuardMetadataGuard` copia grafos de autoría y emite aliases HMAC por build con un dominio independiente. El modo conservador mantiene jerarquía, morphs, parámetros, estados/capas y campos externos. La ruta genérica explícita remapea objetos, morphs, declaraciones/condiciones/campos del Animator, BlendTrees/direct weights, parámetros animados, AvatarMasks y overrides nativos; conserva índices/frames/deltas de morph, pesos de huesos y bounds iniciales. Los subassets del Editor se revisan además de las dependencias de runtime. Integraciones/componentes no revisados, callbacks y selecciones reservadas/ambiguas se rechazan. Se limpian exclusivamente posiciones del grafo del Editor. Fuentes, datos en memoria y prefab persistido se auditan frente a mutaciones tardías.
+
+`GuardBuilder.BuildWithMetadata`/`GuardSetup.PrepareWithMetadata` integran labels/archivos sobre la copia legacy. Manifest schema 1 añade campos opcionales de versión/política y contadores separados de labels/archivos; los formatos de claves y derivaciones anteriores se conservan. El mapa privado se guarda fuera de Assets/Packages, se valida contra BuildID, se respalda junto a key.json y se retira con las claves/assets si la preparación falla. Directorio/archivo privados: 0700/0600. El reconocimiento de copias admite el mapa hermano de un respaldo existente.
+
+**Tests:** **90 Gamma + 90 Linear = 180 comprobaciones**, 12 comparaciones de bundles Linux/Vulkan reabiertos, **error RGB medio 0** y 24 PNG. `LAGMetadataValidation` revisa poses y una transición real de Animator; nombres reservados, fuentes/meta byte idénticos, escena de trabajo limpia preservada mediante previews, reproducción/diversidad, máscaras, controllers sincronizados/anidados, morphs con varios frames, material swaps, overrides, callbacks no revisados, rutas privadas/symlinks y rollback. La fixture SDK pasa **21 comprobaciones** de visemes/ojos/expresiones/PhysBones/Contacts y preparación opt-in con fallos en tres checkpoints. Importación sin SDK/lilToon correcta. Regresiones: **83 comprobaciones** (18 codec + 26 funcional + 14 baseline + 25 preparación), 13 shaders y bundle Windows64 compilados; seis tests OSC. Runners finales con código 0; avisos conocidos del SDK/JobTempAlloc y de main asset names durante importación conservados. Evidencia local en `evidence/metadata-guard/`, sin acceso a VRChat ni descargas nuevas.
+
+**Known issues:** ofuscar nombres no cifra datos ni elimina topología, IDs, parámetros externos o PostVS. No se mide un aumento del tiempo de extracción. Los nombres funcionales SDK permanecen estables; los renombrados internos se limitan al contrato genérico explícito. Texturas/shaders/Avatars y tipos ajenos pueden seguir compartidos en una copia independiente de metadatos. Preparación con SDK no equivale a validación de su artefacto procesado, upload o cliente. No se certifica compatibilidad completa Humanoid, MA/VRCFury, comportamiento de scripts externos ni estabilidad/fugas del Editor. No se publica un unitypackage en esta etapa.
+
+**Next stage:** Stage 14, investigación de fingerprints: amenazas, transformaciones de extracción, controles y métricas de falsos positivos/negativos antes de crear marcas forenses.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -313,7 +327,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 10 | TextureGuard research | Investigación entregada; contrato/restricciones del piloto y criterios de calidad definidos. |
 | 11 | TextureGuard prototype | Piloto de albedo opaco validado: 586 checks Gamma/Linear, 128 comparaciones, 518 PNG y bundles Vulkan/Windows. |
 | 12 | TextureGuard integration | V1 rígida y benchmark implementados; continuación V2 de mipmaps y codec skinned lineal opt-in. Compresión/avatar SDK e integración en el asistente pendientes. |
-| 13 | MetadataGuard | Pendiente; preservar nombres funcionales y schema OSC legacy. |
+| 13 | MetadataGuard | Implementado y validado con contrato conservador; selecciones genéricas explícitas y preparación legacy opt-in. Nombres externos/OSC preservados; sin activación en el asistente ni validación del artefacto SDK. |
 | 14 | Fingerprint research | Pendiente; definir amenazas, controles y detector. |
 | 15 | Mesh fingerprint | Pendiente; sobrevivir transformaciones y reorder con error visual medido. |
 | 16 | Texture fingerprint | Pendiente; evaluar compresión, resize y color. |

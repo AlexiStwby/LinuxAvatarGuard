@@ -119,6 +119,8 @@ namespace LinuxAvatarGuard
             WritePrivate(p.keyPath, JsonUtility.ToJson(key, true));
             if (!string.IsNullOrEmpty(build.manifestPath))
                 WritePrivate(Path.Combine(folder, "private-manifest.json"), File.ReadAllText(build.manifestPath));
+            if (!string.IsNullOrEmpty(build.metadataMapPath))
+                GuardMetadataGuard.WritePrivateMap(Path.Combine(folder, "metadata-map.json"), File.ReadAllText(build.metadataMapPath), key.buildId);
             RefreshTools(p);
             Save(p);
             return p;

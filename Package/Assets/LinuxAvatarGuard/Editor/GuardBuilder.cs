@@ -28,7 +28,7 @@ namespace LinuxAvatarGuard
     public sealed class GuardBuildResult
     {
         public string prefabPath, keyPath;
-        public string buildId, manifestPath;
+        public string buildId, manifestPath, metadataMapPath;
         public int renderers;
     }
     public static class GuardBuilder
@@ -112,6 +112,11 @@ namespace LinuxAvatarGuard
             }
         }
         public static GuardBuildResult Build(GameObject source, float strength, bool experimental)
+            => BuildCore(source, strength, experimental, false);
+        // Explicit opt-in: only generated asset labels/file names change on VRChat avatars.
+        public static GuardBuildResult BuildWithMetadata(GameObject source, float strength, bool experimental)
+            => BuildCore(source, strength, experimental, true);
+        static GuardBuildResult BuildCore(GameObject source, float strength, bool experimental, bool metadata)
         {
             var originalRenderers = Validate(source, experimental);
             string id = Guid.NewGuid().ToString("N");
@@ -123,7 +128,8 @@ namespace LinuxAvatarGuard
             GameObject anchor = null;
             Scene scratch = default;
             string keyPath = Path.GetFullPath("Library/LinuxAvatarGuard/" + id + ".json");
-            bool ownsFolder = false, ownsKey = false;
+            bool ownsFolder = false, ownsKey = false, ownsMetadata = false;
+            string metadataMapPath = keyPath + ".metadata.json";
             try
             {
                 if (AssetDatabase.IsValidFolder(folder) || File.Exists(keyPath)) throw new IOException("BuildID existente; se conservan sus datos.");
@@ -163,6 +169,12 @@ namespace LinuxAvatarGuard
                 var descriptor = copy.GetComponent<VRCAvatarDescriptor>();
                 string[] parameters = Enumerable.Range(0, 4).Select(i => "LAG_" + id.Substring(0, 8) + "_" + i).ToArray();
                 AddDrivers(copy, descriptor, parameters, assets);
+                GuardMetadataSummary metadataSummary = null;
+                if (metadata)
+                {
+                    metadataSummary = GuardMetadataGuard.ApplyOwnedLabels(copy, assets, id, out string mapping);
+                    GuardMetadataGuard.WritePrivateMap(metadataMapPath, mapping); ownsMetadata = true;
+                }
                 // Keep private keys OUTSIDE Assets/Packages, and lock permissions before writing.
                 Directory.CreateDirectory(Path.GetDirectoryName(keyPath));
                 if (chmod(Path.GetDirectoryName(keyPath), 448) != 0) throw new IOException("No se pudo asegurar el directorio de claves.");
@@ -189,15 +201,19 @@ namespace LinuxAvatarGuard
                 GuardBuildManifest.Write(manifestPath, new GuardSecurityManifest {
                     buildId = id, status = ProtectionBuildStatus.AssetsReady.ToString(),
                     rendererCount = originalRenderers.Count, protectedMeshes = encoded.Count,
-                    protectedTextures = 0, experimentalSkinning = experimental
+                    protectedTextures = 0, experimentalSkinning = experimental,
+                    metadataGuardVersion = metadataSummary == null ? 0 : GuardMetadataGuard.Version,
+                    metadataPolicy = metadataSummary?.policy, renamedMetadataAssets = metadataSummary?.assets ?? 0,
+                    renamedMetadataFiles = metadataSummary?.assetFiles ?? 0
                 });
                 return new GuardBuildResult { prefabPath = prefabPath, keyPath = keyPath, renderers = originalRenderers.Count,
-                    buildId = id, manifestPath = manifestPath };
+                    buildId = id, manifestPath = manifestPath, metadataMapPath = metadata ? metadataMapPath : null };
             }
             catch
             {
                 if (ownsFolder) AssetDatabase.DeleteAsset(folder);
                 if (ownsKey && File.Exists(keyPath)) File.Delete(keyPath);
+                if (ownsMetadata && File.Exists(metadataMapPath)) File.Delete(metadataMapPath);
                 throw;
             }
             finally

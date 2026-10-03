@@ -24,6 +24,10 @@ namespace LinuxAvatarGuard
         public static GuardProfile Prepare(GameObject selected, float strength = .1f) => Prepare(selected, strength, null);
         // A checkpoint observer also lets integration tests inject failures at completed boundaries.
         public static GuardProfile Prepare(GameObject selected, float strength, Action<PreparationCheckpoint> checkpoint)
+            => PrepareCore(selected, strength, checkpoint, false);
+        public static GuardProfile PrepareWithMetadata(GameObject selected, float strength = .1f, Action<PreparationCheckpoint> checkpoint = null)
+            => PrepareCore(selected, strength, checkpoint, true);
+        static GuardProfile PrepareCore(GameObject selected, float strength, Action<PreparationCheckpoint> checkpoint, bool metadata)
         {
             var source = AvatarRoot(selected);
             if (GuardProfiles.BuildId(source) != null)
@@ -34,9 +38,8 @@ namespace LinuxAvatarGuard
                 throw new InvalidOperationException("Guarda primero las escenas sin nombre. Los cambios pendientes se conservan.");
             var snapshot = GuardProfiles.RegistrySnapshot();
             var dataRoot = GuardProfiles.DataRoot;
-            var result = GuardBuilder.Build(
-                source, strength,
-                source && source.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length != 0);
+            bool skinned = source && source.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length != 0;
+            var result = metadata ? GuardBuilder.BuildWithMetadata(source, strength, skinned) : GuardBuilder.Build(source, strength, skinned);
             var privateFolder = Path.Combine(dataRoot, result.buildId);
             bool ownsRegistration = false;
             GuardProfile profile = null;
@@ -97,6 +100,7 @@ namespace LinuxAvatarGuard
                         throw new InvalidOperationException("Ruta de rollback inválida.");
                     AssetDatabase.DeleteAsset(folder);
                     if (File.Exists(result.keyPath)) File.Delete(result.keyPath);
+                    if (!string.IsNullOrEmpty(result.metadataMapPath) && File.Exists(result.metadataMapPath)) File.Delete(result.metadataMapPath);
                     var failed = new GuardSecurityManifest { buildId = result.buildId, status = ProtectionBuildStatus.Failed.ToString() };
                     GuardProfiles.WritePrivate(Path.GetFullPath("UserSettings/LinuxAvatarGuardFailures/" + result.buildId + ".json"), JsonUtility.ToJson(failed, true));
                 }
@@ -164,7 +168,10 @@ namespace LinuxAvatarGuard
             var prefab = PrefabUtility.IsPartOfPrefabAsset(root)
                              ? AssetDatabase.GetAssetPath(root)
                              : PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(root);
-            var p = GuardProfiles.Register(new GuardBuildResult { prefabPath = prefab, keyPath = key },
+            var metadataMap = File.Exists(key + ".metadata.json") ? key + ".metadata.json" :
+                Path.Combine(Path.GetDirectoryName(key), "metadata-map.json");
+            var p = GuardProfiles.Register(new GuardBuildResult { prefabPath = prefab, keyPath = key,
+                                          metadataMapPath = File.Exists(metadataMap) ? metadataMap : null },
                                            root.name);
             if (!PrefabUtility.IsPartOfPrefabAsset(root))
                 p.scenePath = root.scene.path;
