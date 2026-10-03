@@ -6,7 +6,7 @@ Fecha: 2026-10-03. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `Li
 
 El roadmap identifica correctamente la necesidad de diversidad, validación y trazabilidad. El codec actual puede ser reconstruido con una fórmula estable si se conocen sus cuatro parámetros. La baseline añadida reproduce esa debilidad; no constituye una nueva protección.
 
-La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos estáticos; Stage 8 añade ShaderForge contextual para raíces rígidas con Animator genérico. Stages 10/11 añaden investigación y piloto de albedo opaco de TextureGuard. Stage 12 incorpora mipmaps/skinning de investigación; Stage 13 entrega MetadataGuard opt-in y Stage 14 completa investigación de fingerprints e identidad privada con evaluación exclusivamente por CPU. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. La integración productiva de esas capas y del codec nuevo continúa pendiente.
+La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos estáticos; Stage 8 añade ShaderForge contextual para raíces rígidas con Animator genérico. Stages 10/11 añaden investigación y piloto de albedo opaco de TextureGuard. Stage 12 incorpora mipmaps/skinning de investigación; Stage 13 entrega MetadataGuard opt-in y Stage 14 completa investigación de fingerprints e identidad privada por CPU. Stage 15 añade el núcleo geométrico validado por CPU y un adaptador Unity compilado; su ejecución y validación visual siguen pendientes. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. La integración productiva de esas capas y del codec nuevo continúa pendiente.
 
 El análisis GPU se limita a Unity y aplicaciones de prueba propias por instrucción del usuario. RenderDoc se descargó con su permiso; no se realiza análisis GPU sobre VRChat.
 
@@ -280,6 +280,20 @@ La primera regresión completó sus aserciones y luego esperó trabajo asíncron
 
 **Next stage:** Stage 15, piloto Unity estático con copia no destructiva, reglas para seams/duplicados, autoverificación, presupuesto y rollback. Mantener pendientes las pruebas gráficas mientras el usuario esté en VRChat/VR; después Stage 16 de albedo y Stage 17 de verificación/calibración.
 
+## Stage 15 — Mesh fingerprint, piloto por CPU
+
+**Status:** avance parcial: núcleo Float32 y almacenamiento privado ejecutados por CPU; adaptador Unity compilado por separado, todavía sin ejecutar. [MESH_FINGERPRINT_PROTOTYPE.md](MESH_FINGERPRINT_PROTOTYPE.md) fija el contrato y las pruebas que faltan. La etapa no se declara cerrada y el asistente permanece en la ruta estable.
+
+**Changes:** `GuardMeshFingerprintV1` deduplica posiciones exactas para que las uniones coincidentes reciban el mismo desplazamiento, normaliza por posiciones únicas y aplica QIM radial de 128 símbolos con dither HMAC versionado. Planificación/restauración, registro autenticado por contexto/binding y observador de investigación sin probabilidad de autoría. Autoverificación Float32 exige ≥96 símbolos utilizables y coincidencia de todos; límites inampliables de desplazamiento. `GuardFingerprintPrivateStore` añade IO Linux por descriptor, 0700/0600, creación sin sobrescribir, commit verificado y rollback con preservación de archivos editados/sustituidos. `GuardMeshFingerprintUnity` captura una fuente persistente y propone una copia estática con auditoría de atributos/topología, bounds globales/submesh ampliados, límites locales de triángulos y manifiesto público sin secretos; nunca asigna la copia a un avatar ni declara Ready.
+
+**Checks:** **119 comprobaciones** del núcleo, 32 identidades/builds sintéticos sobre una fixture de 4.102 posiciones, **61 comprobaciones** de IO Linux. Fuente intacta y restauración exacta; 128/128 símbolos coinciden en nativo, reorder, duplicados sesgados, reflexión y una transformación uniforme Float32. El lector independiente Python concuerda con C# en resultados y hashes. Máximo desplazamiento observado entre 32 builds ≈1,00245×10⁻⁵ unidades de objeto, relativo a diagonal ≈2,89381×10⁻⁶. Ruido ±4×10⁻⁵ y escala no uniforme fallan; fuente sin marca y candidatos insuficientes no se atribuyen. Compilación aislada del adaptador contra bibliotecas instaladas de Unity 2022.3.22f1 correcta. No se inicia Unity, player ni RenderDoc; sin GPU, VRChat, avatar comercial ni descargas.
+
+**Known issues:** fixture de posiciones antipodales sin triángulos; no demuestra comportamiento de una mesh Unity, diversidad de avatares o fiabilidad poblacional. Los controles de atributos, triángulos, reimportación y rollback del adaptador están escritos y compilados, pero aún no ejecutados. Pendientes fixture Unity con topología/seams, fallos en checkpoints, comparación lilToon, FBX/welding, compresión, SDK y contrato de skinning/morphs. Solo piloto estático; no se aplica a Carukia. La marca aporta una señal experimental de trazabilidad, no impide ripping ni prueba propiedad. `confidence=null` y verificador no calibrado.
+
+**Evidence:** `evidence/mesh-fingerprint/cpu-final/`, ignorado por Git: hosts ejecutados, binarios XYZ Float32 sintéticos, informes C#/Python/IO, logs, compilación aislada y hashes de fuentes/herramientas. `RESULTS.json` y `WORK_STATE.json` en la raíz conservan el checkpoint. No son screenshots de un prefab.
+
+**Next stage:** completar la ejecución de Stage 15 en proyecto Unity desechable cuando pueda iniciarse el Editor, sin inspeccionar VRChat. Medir apariencia/triángulos, reimportación y rollback antes de cerrar la etapa. Stage 16 permite continuar después con el núcleo de marcas de albedo por CPU; Stage 17 debe calibrar controles negativos y manejar ambigüedad.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -343,7 +357,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 12 | TextureGuard integration | V1 rígida y benchmark implementados; continuación V2 de mipmaps y codec skinned lineal opt-in. Compresión/avatar SDK e integración en el asistente pendientes. |
 | 13 | MetadataGuard | Implementado y validado con contrato conservador; selecciones genéricas explícitas y preparación legacy opt-in. Nombres externos/OSC preservados; sin activación en el asistente ni validación del artefacto SDK. |
 | 14 | Fingerprint research | Investigación CPU completada; identidad privada de 256 bits, contrato, controles/abstención y plan de calibración. Sin marcas productivas ni activación en el asistente. |
-| 15 | Mesh fingerprint | Pendiente; sobrevivir transformaciones y reorder con error visual medido. |
+| 15 | Mesh fingerprint | Piloto Float32/IO validado por CPU (180 checks) y adaptador Unity compilado. Ejecución Unity, apariencia, FBX/SDK y skinning pendientes; etapa parcial. |
 | 16 | Texture fingerprint | Pendiente; evaluar compresión, resize y color. |
 | 17 | Fingerprint verifier | Pendiente; confianza calibrada y falsos positivos/negativos. |
 | 18 | CanaryGuard | Pendiente; opcional, removible y de coste medido. |
