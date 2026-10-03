@@ -6,7 +6,7 @@ Fecha: 2026-10-02. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `Li
 
 El roadmap identifica correctamente la necesidad de diversidad, validación y trazabilidad. El codec actual puede ser reconstruido con una fórmula estable si se conocen sus cuatro parámetros. La baseline añadida reproduce esa debilidad; no constituye una nueva protección.
 
-La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos estáticos; Stage 8 añade ShaderForge contextual para raíces rígidas con Animator genérico. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. TextureGuard, fingerprints, skinning e integración productiva del codec nuevo siguen pendientes.
+La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos estáticos; Stage 8 añade ShaderForge contextual para raíces rígidas con Animator genérico. Stages 10/11 añaden investigación y piloto de albedo opaco de TextureGuard. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. Integración de TextureGuard, fingerprints, skinning e integración productiva del codec nuevo siguen pendientes.
 
 El análisis GPU se limita a Unity y aplicaciones de prueba propias por instrucción del usuario. RenderDoc se descargó con su permiso; no se realiza análisis GPU sobre VRChat.
 
@@ -153,7 +153,32 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Known issues:** XOR/tile permutation son ofuscación y se pueden revertir con shader más parámetros runtime; la observabilidad GPU permanece. Normales/HDR/alfa, compresión, streaming, trilinear/anisotropía y mips requieren codecs y validación propios. El piloto inicial acepta fuentes opacas RGBA32 de un solo mip; no es una conversión automática de texturas de avatar ni una certificación del SDK/cliente.
 
-**Next stage:** Stage 11, implementar y validar el piloto de albedo opaco con los criterios anteriores. Stage 12 tratará integración contextual y ampliación de formatos; el asistente productivo conserva cero texturas protegidas.
+**Next stage:** Stage 11 se implementó y validó en la continuación siguiente. Stage 12 tratará integración contextual y ampliación de formatos; el asistente productivo conserva cero texturas protegidas.
+
+## Stage 11 — TextureGuard prototype
+
+**Status:** piloto de albedo opaco implementado y validado como API de investigación. Integración de avatares/perfiles pendiente.
+
+**Changes:** [GuardTextureCodec.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardTextureCodec.cs) aporta contrato/plan/programa inmutables con 16 tiles, ocho orientaciones, seis órdenes RGB y XOR con salts/valores runtime. Derivación HMAC-SHA256 separada por fuente/scope. Payload RGBA32 lineal no legible; decoder GPU por texel conserva vecindarios Repeat/Clamp y filtra después de invertir los bytes. Flag de datos sRGB independiente de la vista GPU. [GuardTextureForge.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardTextureForge.cs) genera material/textura/providers independientes, licencia y manifest ResearchOnly; mutaciones tardías y claves serializadas no cero cancelan y retiran la salida nueva. Documentación/API: [TEXTURE_GUARD_PROTOTYPE.md](TEXTURE_GUARD_PROTOTYPE.md).
+
+**Tests:** [LAGTextureValidation.cs](../Tests/LAGTextureValidation.cs), **293 comprobaciones por espacio de color (586)**, **128 comparaciones visuales y 518 PNG**. Dieciséis combinaciones por modo: sRGB/linear × Point/Bilinear × Repeat/Clamp por cada eje; tres escalas/offsets con UV negativas y fronteras, más reapertura nativa de cada material/prefab. Un bundle Linux/Vulkan y un Windows64 por modo; 32 shaders por modo (16 fachadas y 16 providers). Recuperación independiente de **32 programas por modo**, todos byte idénticos; claves ausentes/incorrectas y programas ajenos fallan. Importador PNG/source assets/includes preservados, planes invalidados por mutaciones, rollback tardío y rechazo de claves no cero tras importar.
+
+| Medición final | Gamma | Linear |
+| --- | ---: | ---: |
+| Error máximo de recuperación de bytes | 0 | 0 |
+| Diferencia media máxima de imagen | 0,00011443 | 0,00036424 |
+| Diferencia máxima de canal RGBA8 | ≈1/255 | ≈2/255 |
+| Diferencia media mínima sin clave | 0,27759 | 0,20235 |
+| Diferencia media mínima con clave errónea | 0,27726 | 0,20197 |
+| Bytes de payload GPU: 16×64×64×4 | 262.144 | 262.144 |
+| Bundle Linux comprimido, bytes | 1.044.881 | 1.179.970 |
+| Bundle Windows64 comprimido, bytes | 336.546 | 370.133 |
+
+**Regressions:** 182 ShaderForge + 684 atributos + 53 binding + 44 prototipo + 83 fundación = **1.046 comprobaciones** correctas; 13 shaders/bundle Windows adicionales. Seis tests OSC correctos. API compilada/ejecutada sin SDK ni lilToon en Vulkan con fuentes copiadas. Las cuatro ejecuciones finales terminan con código 0, sin errores C#/shader ni excepciones. Evidencia en `evidence/texture-guard/{gamma,linear}/validation.json`, PNG/bundles/resources, `sdk-free.json`, `final-runs.json`; logs `evidence/texture-validation-{gamma,linear}-final.log`, `texture-regression-final.log`, `texture-sdk-free-final.log`.
+
+**Known issues:** el extractor específico interpreta HLSL emitido más valores runtime de fixture y recupera todos los programas; no hay resistencia demostrada a extracción adaptativa/GPU ni recuperación de claves desconocidas. Solo albedo opaco RGBA32 sin mips/compresión, en mono/unlit con filtro de variantes de test. Falta matriz de iluminación/stereo/animación, máscaras/emisión/normales, sampling avanzado y rendimiento en player. Las fuentes y el cliente Carukia/VRChat no se analizan. Los logs del proyecto con SDK conservan mensajes de licencia recuperados y avisos Persistent/TransformAccessArray al terminar; la regresión también conserva `m_TaskQueue.empty()`/JobTempAlloc de iteraciones anteriores. Causa no aislada: no se certifica estabilidad ni memoria/rendimiento del Editor. El primer build detectó inserción junto a un include comentado; se corrigió y se añadió regresión. La primera enumeración LoadAllAssets fue incompleta; ahora se incluyen salidas explícitas y se comprueba el grafo/bindings nativos.
+
+**Next stage:** Stage 12, integración contextual por binding/slot, respaldo privado y remapeo de materiales/clips, seguida de ampliaciones de formatos/mipmaps con presupuesto de calidad/coste. Mantener fuera del asistente hasta validar el artefacto procesado y las funciones de avatar admitidas. El manifiesto productivo sigue reportando cero texturas protegidas.
 
 ## Fundación de validación y ciclo de vida
 
@@ -214,8 +239,8 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 8 | ShaderForge integration | Investigación rígida/genérica implementada: 182 comprobaciones, copias por binding/slot y clips/controllers; skinning/SDK pendientes. |
 | 9 | Performance benchmark | Benchmark rígido completado: 36 procesos, 24 rondas pareadas, 403.103 frames y recursos/ISA medidos; SDK/skinning pendientes. |
 | 10 | TextureGuard research | Investigación entregada; contrato/restricciones del piloto y criterios de calidad definidos. |
-| 11 | TextureGuard prototype | Pendiente; piloto de albedo opaco y copias independientes. |
-| 12 | TextureGuard integration | Pendiente; ampliar por tipo de textura tras validar calidad/coste. |
+| 11 | TextureGuard prototype | Piloto de albedo opaco validado: 586 checks Gamma/Linear, 128 comparaciones, 518 PNG y bundles Vulkan/Windows. |
+| 12 | TextureGuard integration | Pendiente; contexto binding/slot, persistencia/clips, formatos/mips y benchmark antes del asistente. |
 | 13 | MetadataGuard | Pendiente; preservar nombres funcionales y schema OSC legacy. |
 | 14 | Fingerprint research | Pendiente; definir amenazas, controles y detector. |
 | 15 | Mesh fingerprint | Pendiente; sobrevivir transformaciones y reorder con error visual medido. |

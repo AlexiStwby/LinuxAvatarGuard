@@ -20,17 +20,19 @@ namespace LinuxAvatarGuard
         readonly string folder, buildId;
         readonly DecoderFragment decoder;
         readonly bool opaqueNames;
+        readonly TextureDecoderFragment textureDecoder;
         public string[] GeneratedAssetPaths => new List<string>(generatedPaths.Values).ToArray();
         public string[] ProviderAssetPaths => new List<string>(generatedPaths.Keys).FindAll(name=>name.StartsWith("Hidden/ltspass_",StringComparison.Ordinal)).ConvertAll(name=>generatedPaths[name]).ToArray();
         readonly Dictionary<string, string> generated = new Dictionary<string, string>();
         readonly Dictionary<string, string> generatedPaths = new Dictionary<string, string>();
         public GuardShaders(string folder, string buildId) : this(folder, buildId, LegacyLinearCodecV1.Decoder) { }
         public GuardShaders(string folder, string buildId, DecoderFragment decoder) : this(folder,buildId,decoder,false) { }
-        internal GuardShaders(string folder, string buildId, DecoderFragment decoder, bool opaqueNames)
+        internal GuardShaders(string folder, string buildId, DecoderFragment decoder, bool opaqueNames, TextureDecoderFragment textureDecoder = null)
         {
             this.folder = folder; this.buildId = buildId;
             this.decoder = decoder ?? throw new ArgumentNullException(nameof(decoder));
             this.opaqueNames=opaqueNames;
+            this.textureDecoder=textureDecoder;
         }
         public static bool Supports(Shader s) => s != null && Allowed.Contains(s.name);
         public static string Property(int i) => "_LAGKey" + i;
@@ -76,6 +78,12 @@ namespace LinuxAvatarGuard
                 var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path), include));
                 return "#include \"" + FileUtil.GetProjectRelativePath(resolved) + "\"";
             });
+            if (textureDecoder != null)
+            {
+                text = Regex.Replace(text, "(?m)^[ \\t]*#include\\s+\"([^\"]*/lil_common\\.hlsl)\"", match => match.Value + "\n" + textureDecoder.Functions);
+                // The research decoder uses integer texture loads, tested on these desktop APIs only.
+                text = Regex.Replace(text, @"(?m)^(\s*#pragma\s+target[^\r\n]*)", "$1\n#pragma only_renderers vulkan d3d11");
+            }
             var properties = Regex.Match(text, "Properties\\s*\\{");
             if (!properties.Success) throw new InvalidOperationException("Shader sin Properties: " + name);
             string declarations = "\n";
@@ -83,7 +91,7 @@ namespace LinuxAvatarGuard
             text = text.Insert(properties.Index + properties.Length, declarations);
             int sub = text.IndexOf("SubShader", StringComparison.Ordinal);
             if (sub < 0) throw new InvalidOperationException("Shader sin SubShader: " + name);
-            text = text.Insert(sub, decoder.Injection);
+            text = text.Insert(sub, decoder.Injection + (textureDecoder?.MainOverride ?? ""));
             // lilToon's inspector can switch a protected material back to an unprotected shader.
             text = Regex.Replace(text, "CustomEditor\\s+\"[^\"]+\"", "CustomEditor \"LinuxAvatarGuard.ProtectedMaterialInspector\"");
             text = Regex.Replace(text, "Fallback\\s+\"[^\"]+\"", "Fallback Off");

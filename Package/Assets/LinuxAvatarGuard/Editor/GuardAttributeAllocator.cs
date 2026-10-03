@@ -69,7 +69,7 @@ namespace LinuxAvatarGuard
             if ((obj.GetComponent<Animator>() && (animation==null || obj.GetComponent<Animator>()!=animation.Animator)) || obj.GetComponent<Animation>() || obj.GetComponent<PlayableDirector>() || obj.GetComponents<MonoBehaviour>().Length != 0)
                 throw new InvalidOperationException("El allocator estático no analiza Animator, Animation, Timeline ni scripts. Integración contextual pendiente.");
         }
-        static string ReviewSources(Shader shader)
+        internal static string ReviewSources(Shader shader)
         {
             if (!shader || !shaders.TryGetValue(shader.name, out var filename))
                 throw new InvalidOperationException("Shader/variante sin contrato de atributos revisado.");

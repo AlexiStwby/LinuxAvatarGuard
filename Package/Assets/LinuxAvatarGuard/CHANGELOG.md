@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased — security foundation
+- Research TextureGuard for opaque single-mip RGBA32 albedo: typed tile/orientation/RGB/XOR programs, source/scope-separated deterministic streams and unreadable linear payload copies.
+- Texel reconstruction before Point/Bilinear filtering, independent Repeat/Clamp addressing, authored sRGB flags and copied lilToon facade/UsePass hooks; avatar preparation remains legacy with zero protected textures.
+- Gamma/Linear Vulkan comparisons, independent adaptive recovery, original/importer preservation, native dependency/binding checks, Windows64 compilation and late source/nonzero-key rollback tests.
 - Reproducible SDK-free Linux/Vulkan performance player: isolated original/legacy/contextual runs, paired interleaved rounds, frame/counter CSVs and own-process DRM memory accounting.
 - Separate owned-player RenderDoc/SPIR-V and Intel driver executable statistics; native visual parity and resource/build cost results, with provisional same-hardware regression budgets.
 - Research-only contextual ShaderForge: per-renderer/slot materials, opaque shader families and contextual material-swap clips/controller copies; avatar preparation remains legacy.

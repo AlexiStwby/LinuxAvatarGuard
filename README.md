@@ -40,6 +40,8 @@ El [ShaderForge contextual](docs/GENERATED_SHADER_FORGE.md) añade copias por re
 
 El [benchmark de rendimiento](docs/PERFORMANCE_BENCHMARK.md) compara original, legacy y ShaderForge en un player Linux/Vulkan propio: 36 ejecuciones, rondas alternadas, CPU/GPU, recursos y shaders compilados. Conserva la apariencia desbloqueada y cuantifica el coste de copias por binding; los resultados describen fixtures rígidas y el hardware medido.
 
+La [investigación de TextureGuard](docs/TEXTURE_GUARD_RESEARCH.md) y su [piloto de albedo opaco](docs/TEXTURE_GUARD_PROTOTYPE.md) añaden copias de textura/material con programas reproducibles por fuente/scope. Se validan Gamma/Linear, Point/Bilinear, Repeat/Clamp y bundles Vulkan/Windows con 586 comprobaciones y 518 imágenes de contenido propio. El extractor específico sigue recuperando los datos al disponer del HLSL y los parámetros. Es una API de investigación sin integración en el asistente; fuentes con mipmaps/compresión y funciones completas de avatar requieren las siguientes etapas.
+
 Pruebas OSC, desde la raíz del repositorio:
 
 ```sh
