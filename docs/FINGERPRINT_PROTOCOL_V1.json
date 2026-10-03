@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "kind": "LAG-fingerprint-research-design",
+  "stage": 14,
+  "status": "ResearchOnly",
+  "identity": {
+    "privateRecordType": "LAG-Fingerprint-Identity-v1",
+    "state": "IdentityOnly",
+    "fingerprintBits": 256,
+    "carrierSeedBits": 256,
+    "componentCodewordBits": 128,
+    "generator": "Independent operating-system CSPRNG draws",
+    "buildId": "32 lowercase hexadecimal characters",
+    "bindingId": "64 lowercase hexadecimal characters, looked up in private original registry",
+    "derivation": "HMAC-SHA256(carrierSeed, UTF8(header) || rawFingerprintBytes)",
+    "header": "LAG/fingerprint/v1/{purpose}\u0000{channel}\u0000{buildId}\u0000{bindingId}\u0000",
+    "purposes": ["carrier", "codeword"],
+    "channels": ["mesh", "texture"],
+    "carrierResultBytes": 32,
+    "codewordResultBytes": 16,
+    "bitOrder": "Most significant bit first",
+    "runtimeKeyInput": false
+  },
+  "privacy": {
+    "publicIdentityFields": ["schema", "state", "buildId", "markedMeshes", "markedTextures", "verifierCalibrated"],
+    "neverPublish": ["fingerprintBase64", "carrierSeedBase64", "derivedCodeword", "derivedCarrierSeed", "sourcePaths", "originalReferenceData"],
+    "localStorage": "Private configured directory outside Unity project and Git",
+    "directoryMode": "0700",
+    "fileMode": "0600",
+    "allowSymlinks": false,
+    "allowHardlinkedFiles": false,
+    "overwriteExistingIdentity": false,
+    "sameUserSandbox": false
+  },
+  "researchDecision": {
+    "symbols": 128,
+    "minimumUsableSymbols": 96,
+    "minimumAgreementFraction": 0.8515625,
+    "scoreIsAttributionProbability": false,
+    "confidence": null,
+    "outcomes": ["ResearchMatch", "NoResearchMatch", "InconclusiveCoverage"],
+    "calibrationState": "PendingStage17",
+    "multipleCandidates": "Report all candidates and ambiguity; never select sole attribution by maximum score alone"
+  },
+  "cpuStudy": {
+    "implementation": "Tests/Fingerprint/research.py",
+    "data": "Three own synthetic point-cloud and RGB-image families; four independent identities each",
+    "geometry": "Blind radial-band QIM baseline, 128 bands, arithmetic center and maximum radius",
+    "meshQuantizationStepRelativeToRadius": 0.00001,
+    "texture": "128x128 orthonormal DCT of an encoded RGB luminance proxy; three carriers per symbol",
+    "textureQuantizationStep": 0.018,
+    "sampler": "NumPy PCG64, research only; not a production carrier protocol",
+    "positiveCases": {
+      "mesh": ["identity", "reorder", "similarity", "float32_roundtrip", "quantize_1e-5", "noise_sigma_1e-6", "noise_sigma_2e-5", "nonuniform_scale", "drop_20_percent", "deformation_proxy", "collusion_average_2"],
+      "texture": ["identity", "png_roundtrip", "jpeg_q95", "jpeg_q75", "jpeg_q75_420", "resize_0.75", "resize_0.5", "color_affine", "gamma_1.05", "gamma_1.2", "blur_0.5", "crop_border_4", "collusion_average_2"]
+    },
+    "negativeCases": ["wrong_identity_for_each_attack", "unmarked_same_source", "different_build_same_source", "different_source"],
+    "indexMarkerControl": ["identity", "reorder"],
+    "gpuRequired": false,
+    "vrchatAccess": false,
+    "dependencyDownloads": false
+  },
+  "proposedPilotBudgets": {
+    "meshMaximumDisplacementRelativeToBoundsDiagonal": 0.00001,
+    "meshMaximumObjectSpaceDisplacement": 0.00005,
+    "textureMeanAbsoluteRgb": 0.0015,
+    "textureMaximumRgb": 0.012,
+    "textureMinimumPsnrDb": 45,
+    "visualApprovalRequiredBeforeWizard": true,
+    "calibrationRequiredBeforeAttributionConfidence": true
+  },
+  "integrationOrder": ["AuditOriginal", "CloneOwnedAssets", "CreateOrRestorePrivateIdentity", "FingerprintPlainGeometryAndAlbedo", "AuditAndSelfVerifyMarkedCopy", "ObfuscateMarkedCopy", "RemapOwnedMetadata", "ValidateSdkProcessedArtifact", "PublishReadyAfterPrivateBackup"],
+  "pendingGates": ["ProductionMeshCodec", "ProductionTextureCodec", "VertexDuplicationAndWelding", "ActualFbxRoundtrip", "SkinnedPosesAndMorphs", "ActualUnityBcCompressionAndMips", "GammaLinearLilToonVisualValidation", "RegistryWideHeldOutCalibration", "SdkProcessedBundle", "RollbackIntegration", "Wizard", "NewUnitypackage"]
+}

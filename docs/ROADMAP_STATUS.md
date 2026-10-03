@@ -1,12 +1,12 @@
 # Estado y plan de mejora de seguridad
 
-Fecha: 2026-10-02. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `LinuxAvatarGuard_SECURITY_ROADMAP.md`, especialmente apartados 37–45.
+Fecha: 2026-10-03. Versión productiva auditada: 0.2.1 (`7f3ebc3`). Entrada: `LinuxAvatarGuard_SECURITY_ROADMAP.md`, especialmente apartados 37–45.
 
 ## Decisión de esta iteración
 
 El roadmap identifica correctamente la necesidad de diversidad, validación y trazabilidad. El codec actual puede ser reconstruido con una fórmula estable si se conocen sus cuatro parámetros. La baseline añadida reproduce esa debilidad; no constituye una nueva protección.
 
-La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos estáticos; Stage 8 añade ShaderForge contextual para raíces rígidas con Animator genérico. Stages 10/11 añaden investigación y piloto de albedo opaco de TextureGuard. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. Integración de TextureGuard, fingerprints, skinning e integración productiva del codec nuevo siguen pendientes.
+La primera iteración entregó auditoría, baseline y diseño. Las continuaciones implementaron el adaptador legacy, metadata/rollback, análisis GPU controlado y el prototipo estático de Stage 4. Stage 5 añade identidad y derivación por binding con contexto privado reproducible; Stage 6 mide diversidad y extracción adaptativa; Stage 7 incorpora asignación conservadora de atributos estáticos; Stage 8 añade ShaderForge contextual para raíces rígidas con Animator genérico. Stages 10/11 añaden investigación y piloto de albedo opaco de TextureGuard. Stage 12 incorpora mipmaps/skinning de investigación; Stage 13 entrega MetadataGuard opt-in y Stage 14 completa investigación de fingerprints e identidad privada con evaluación exclusivamente por CPU. La fórmula legacy, UV, formato OSC y avatares publicados siguen compatibles; los binarios de 0.2.1 no se sustituyen. La integración productiva de esas capas y del codec nuevo continúa pendiente.
 
 El análisis GPU se limita a Unity y aplicaciones de prueba propias por instrucción del usuario. RenderDoc se descargó con su permiso; no se realiza análisis GPU sobre VRChat.
 
@@ -266,6 +266,20 @@ La primera regresión completó sus aserciones y luego esperó trabajo asíncron
 
 **Next stage:** Stage 14, investigación de fingerprints: amenazas, transformaciones de extracción, controles y métricas de falsos positivos/negativos antes de crear marcas forenses.
 
+## Stage 14 — FingerprintGuard research
+
+**Status:** investigación completada, contexto privado implementado y candidatos evaluados por CPU. [FINGERPRINT_RESEARCH.md](FINGERPRINT_RESEARCH.md) recoge fuentes primarias, decisiones, amenazas, evidencia y gates; [FINGERPRINT_PROTOCOL_V1.json](FINGERPRINT_PROTOCOL_V1.json) fija el contrato de investigación. Crear el contexto no marca un avatar: su estado inicial es `IdentityOnly` y el asistente conserva la ruta publicada.
+
+**Changes:** `GuardFingerprintContext` genera identidad y carrier seed independientes de 256 bits, separadas de OSC/codec, y deriva codewords de 128 bits por binding/mesh/texture con HMAC-SHA256 y dominios versionados. Restauración estricta de DTO schema 1, arrays copiadas/limpiadas y resumen público sin secretos ni contadores de protección falsos. No tiene llamadas Unity/gráficos ni IO automático. El harness sintético por CPU añade baseline por índice, QIM radial/DCT, controles negativos de la misma fuente/otros builds, abstención por cobertura y comparación de dos contribuyentes promediados. Sus snapshots se guardan por descriptor en espacio local privado externo a Unity/Git con 0700/0600 y sin sobrescritura.
+
+**Checks:** host C# standalone compilado/ejecutado con las herramientas ya instaladas: **34 comprobaciones**; dos vectores HMAC contrastados con Python. Store de investigación: **17 tests** de permisos, enlaces, FIFO, límites, rutas y colisiones. Doce trials de tres familias propias: **132 observaciones geométricas + 156 de textura**, además de **1.092 + 1.284 controles negativos**, cero coincidencias al umbral exploratorio. El marcador por índice falla 12/12 tras reorder. El radial conserva reorder/similitud en 8/12 y se abstiene en cuatro por falta de cobertura; ruido mayor, escala no uniforme y recorte/deformación fallan. DCT detecta 12/12 en PNG, JPEG95, resize/color suaves, pero solo 1/12 con JPEG75 y 0/12 con recorte. Promediar dos copias reconoce ambos contribuyentes en 8/12 geométricos y 7/12 de textura; no habilita atribución exclusiva. Desplazamiento máximo relativo a la diagonal ≈4,317×10⁻⁶; PSNR RGB8 mínimo 54,46 dB. Fuentes intactas y reproducción numérica idéntica desde snapshot privado. No se inició Unity, no se accedió a VRChat/GPU ni se descargaron herramientas.
+
+**Known issues:** nube de posiciones sin topología/skin y tres imágenes procedurales; casos correlacionados y umbral sin calibración poblacional. Cero coincidencias no prueba una FPR universal. Score no equivale a probabilidad de autoría y se conserva `confidence=null`. Pendientes FBX/welding, correspondencias de pose, albedos/compresión/mips reales, comparación Unity/lilToon, SDK, IO/rollback productivo, verificador/UI y nuevo unitypackage. La marca no impide extracción GPU ni acredita propiedad/robo. El HOME local contiene Git: el store rechazó esa ubicación; las fixtures utilizan datos privados bajo `/var/tmp`, espacio de investigación que puede limpiarse y no es el respaldo productivo de un avatar.
+
+**Evidence:** `evidence/fingerprint-research/`, ignorado por Git: host C#, informes CPU/replay, seis PNG sintéticas, medidas, ambigüedad, logs, hashes y checkpoint. Registros privados fuera del repositorio; las imágenes no son screenshots del prefab.
+
+**Next stage:** Stage 15, piloto Unity estático con copia no destructiva, reglas para seams/duplicados, autoverificación, presupuesto y rollback. Mantener pendientes las pruebas gráficas mientras el usuario esté en VRChat/VR; después Stage 16 de albedo y Stage 17 de verificación/calibración.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -328,7 +342,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 11 | TextureGuard prototype | Piloto de albedo opaco validado: 586 checks Gamma/Linear, 128 comparaciones, 518 PNG y bundles Vulkan/Windows. |
 | 12 | TextureGuard integration | V1 rígida y benchmark implementados; continuación V2 de mipmaps y codec skinned lineal opt-in. Compresión/avatar SDK e integración en el asistente pendientes. |
 | 13 | MetadataGuard | Implementado y validado con contrato conservador; selecciones genéricas explícitas y preparación legacy opt-in. Nombres externos/OSC preservados; sin activación en el asistente ni validación del artefacto SDK. |
-| 14 | Fingerprint research | Pendiente; definir amenazas, controles y detector. |
+| 14 | Fingerprint research | Investigación CPU completada; identidad privada de 256 bits, contrato, controles/abstención y plan de calibración. Sin marcas productivas ni activación en el asistente. |
 | 15 | Mesh fingerprint | Pendiente; sobrevivir transformaciones y reorder con error visual medido. |
 | 16 | Texture fingerprint | Pendiente; evaluar compresión, resize y color. |
 | 17 | Fingerprint verifier | Pendiente; confianza calibrada y falsos positivos/negativos. |

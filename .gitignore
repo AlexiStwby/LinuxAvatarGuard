@@ -24,6 +24,8 @@
 !/docs/TEXTURE_GUARD_INTEGRATION.md
 !/docs/MIP_SKIN_RESEARCH.md
 !/docs/METADATA_GUARD.md
+!/docs/FINGERPRINT_RESEARCH.md
+!/docs/FINGERPRINT_PROTOCOL_V1.json
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -62,6 +64,7 @@
 !/Tests/LAGMetadataImportSmoke.cs
 !/Tests/LAGMetadataSdkValidation.cs
 !/Tests/Metadata/
+!/Tests/Fingerprint/
 !/Tests/Performance/
 
 /dist/*
@@ -90,4 +93,5 @@
 **/private-manifest*
 **/metadata-map.json
 **/*.metadata.json
+**/fingerprint-private.json
 **/*.vrca
