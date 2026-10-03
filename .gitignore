@@ -22,6 +22,7 @@
 !/docs/TEXTURE_GUARD_RESEARCH.md
 !/docs/TEXTURE_GUARD_PROTOTYPE.md
 !/docs/TEXTURE_GUARD_INTEGRATION.md
+!/docs/MIP_SKIN_RESEARCH.md
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -54,6 +55,8 @@
 !/Tests/LAGTextureValidation.cs
 !/Tests/LAGTextureIntegrationValidation.cs
 !/Tests/LAGTextureIntegrationImportSmoke.cs
+!/Tests/LAGSkinningCharacterization.cs
+!/Tests/LAGMipSkinValidation.cs
 !/Tests/Performance/
 
 /dist/*

@@ -35,52 +35,53 @@ namespace LinuxAvatarGuard
     // Explicit research API. The avatar wizard and GuardBuilder keep the proven legacy route.
     public static class GuardShaderForge
     {
-        public const int Version=2;
+        public const int Version=3;
         sealed class TextureWork : IDisposable
         {
             public GuardTextureBindingIdentity Binding;
-            public TextureGuardCodecV1 Codec;
+            public ITextureCodec Codec;
             public TexturePlan Plan;
             public Texture2D Encoded;
             public GuardShaders Shaders;
             public Shader Shader;
             public string Folder;
-            public void Dispose(){Codec?.Dispose();if(Encoded&&!AssetDatabase.Contains(Encoded))Object.DestroyImmediate(Encoded);}
+            public void Dispose(){(Codec as IDisposable)?.Dispose();if(Encoded&&!AssetDatabase.Contains(Encoded))Object.DestroyImmediate(Encoded);}
         }
         sealed class BindingWork : IDisposable
         {
             public Renderer Source;
             public MeshBindingIdentity Binding;
-            public StaticPolymorphicCodecV1 Codec;
+            public IMeshCodec Codec;
             public CodecPlan Plan;
             public Mesh Encoded;
             public GuardShaders Shaders;
-            public string Path,Folder;
+            public string Path,Folder,EncodedHash;
             public readonly Dictionary<string,TextureWork> Textures=new Dictionary<string,TextureWork>();
             public IEnumerable<GuardShaders> ShaderFamilies => Textures.Count==0 ? new[]{Shaders} : Textures.Values.Select(t=>t.Shaders);
-            public void Dispose(){Codec?.Dispose();foreach(var t in Textures.Values)t.Dispose();if(Encoded&&!AssetDatabase.Contains(Encoded))Object.DestroyImmediate(Encoded);}
+            public void Dispose(){(Codec as IDisposable)?.Dispose();foreach(var t in Textures.Values)t.Dispose();if(Encoded&&!AssetDatabase.Contains(Encoded))Object.DestroyImmediate(Encoded);}
         }
         [Serializable] sealed class PublicBinding
         {
-            public string bindingId,programHash,usageHash,mesh;
+            public string bindingId,programHash,usageHash,mesh,codecId;
+            public int codecVersion;public bool skinned;
             public int firstUv,secondUv,attributePolicy;
         }
         [Serializable] sealed class PublicManifest
         {
             public int forgeVersion,codecVersion;
             public string buildId,codecId,animationHash,status;
-            public bool sdkProcessed=false,skinningValidated=false,texturesProtected=false;
+            public bool sdkProcessed=false,skinningValidated=false,texturesProtected=false,skinningEnabled=false,mipmapsEnabled=false;
             public PublicBinding[] bindings;
             public PublicTexture[] textureBindings;
         }
         [Serializable] sealed class PublicTexture
         {
-            public string bindingId,meshBindingId,property,programHash,payload,material;
+            public string bindingId,meshBindingId,property,programHash,payload,material,codecId;
             public int slot,codecVersion,mipCount;
         }
         static string Digest(string value)=>MeshBindingIdentity.Digest(Encoding.UTF8.GetBytes(value));
         static string MaterialKey(BindingWork w,int slot,Material material) => w.Binding.StableId+"/"+slot+"/"+GuardAnimationContext.Identity(material)+"/"+
-            StaticPolymorphicCodecV1.ProgramHash(w.Plan)+"/"+w.Plan.Program.Attributes.FirstUvChannel+"/"+w.Plan.Program.Attributes.SecondUvChannel+"/"+GuardAnimationContext.Identity(material.shader);
+            MeshProgramHash(w.Plan)+"/"+w.Plan.Program.Attributes.FirstUvChannel+"/"+w.Plan.Program.Attributes.SecondUvChannel+"/"+GuardAnimationContext.Identity(material.shader);
         static void OutputPath(string folder)
         {
             if(folder==null || !Regex.IsMatch(folder,@"\AAssets/LinuxAvatarGuardGenerated/Research/[A-Za-z0-9_-]{1,64}\z"))
@@ -90,15 +91,15 @@ namespace LinuxAvatarGuard
                 if((Directory.Exists(parent)||File.Exists(parent))&&(File.GetAttributes(parent)&FileAttributes.ReparsePoint)!=0)
                     throw new InvalidOperationException("La ruta de salida contiene un enlace simbólico.");
         }
-        static void Components(GameObject root)
+        static void Components(GameObject root,bool skinning)
         {
             foreach(var c in root.GetComponentsInChildren<Component>(true))
-                if(!c || !(c is Transform||c is MeshFilter||c is MeshRenderer||c is Animator))
+                if(!c || !(c is Transform||c is MeshFilter||c is MeshRenderer||c is Animator||(skinning&&c is SkinnedMeshRenderer)))
                     throw new InvalidOperationException("ShaderForge contextual inicial: solo Transform, MeshFilter, MeshRenderer y Animator genérico revisados.");
             foreach(var t in root.GetComponentsInChildren<Transform>(true))
             {
                 if(t.name.Contains("/"))throw new InvalidOperationException("Nombre con separador de ruta de animación.");
-                if(t.GetComponents<MeshRenderer>().Length>1||t.GetComponents<MeshFilter>().Length>1)
+                if(t.GetComponents<Renderer>().Length>1||t.GetComponents<MeshFilter>().Length>1)
                     throw new InvalidOperationException("Componentes de geometría duplicados.");
                 var filter=t.GetComponent<MeshFilter>();
                 if(filter && !t.GetComponent<MeshRenderer>())throw new InvalidOperationException("MeshFilter sin binding de renderer.");
@@ -109,30 +110,36 @@ namespace LinuxAvatarGuard
         // Explicit research opt-in. Every possible material's opaque albedo must pass the positive contract.
         public static GuardShaderArtifact PrepareWithTextures(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength=.15f)
             => PrepareCore(sourceRoot,context,outputFolder,strength,true);
-        static GuardShaderArtifact PrepareCore(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength,bool protectTextures)
+        public static GuardShaderArtifact PrepareWithFeatures(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength=.15f,bool allowMipmaps=true,bool allowSkinning=true)
+            => PrepareCore(sourceRoot,context,outputFolder,strength,true,allowMipmaps,allowSkinning);
+        public static GuardShaderArtifact PrepareWithSkinning(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength=.15f)
+            => PrepareCore(sourceRoot,context,outputFolder,strength,false,false,true);
+        internal static string MeshProgramHash(CodecPlan plan)=>plan.Program.CodecId==SkinnedLinearCodecV1.Id?SkinnedLinearCodecV1.ProgramHash(plan):StaticPolymorphicCodecV1.ProgramHash(plan);
+        static GuardShaderArtifact PrepareCore(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength,bool protectTextures,bool allowMipmaps=false,bool allowSkinning=false)
         {
             if(!sourceRoot||context==null)throw new ArgumentNullException("Fuente/contexto");
             if(!protectTextures&&context.TextureBindingCount!=0)throw new InvalidOperationException("El contexto contiene texturas; usa PrepareWithTextures para conservar su protección.");
-            OutputPath(outputFolder);Components(sourceRoot);
-            var animation=GuardAnimationContext.Capture(sourceRoot,protectTextures);
+            if(!allowSkinning&&context.SkinningBindingCount!=0)throw new InvalidOperationException("El respaldo contiene skinning; conserva la ruta opt-in.");
+            OutputPath(outputFolder);Components(sourceRoot,allowSkinning);
+            var animation=GuardAnimationContext.Capture(sourceRoot,protectTextures,allowSkinning);
             var work=new List<BindingWork>();GameObject copy=null;bool owned=false;
             var materials=new Dictionary<string,Material>();var clips=new Dictionary<AnimationClip,AnimationClip>();
             try
             {
                 // Every renderer is analyzed and encoded before the first output asset is written.
-                foreach(var renderer in sourceRoot.GetComponentsInChildren<MeshRenderer>(true))
+                foreach(var renderer in sourceRoot.GetComponentsInChildren<Renderer>(true))
                 {
-                    var w=new BindingWork {Source=renderer,Binding=MeshBindingIdentity.Capture(sourceRoot,renderer),Path=AnimationUtility.CalculateTransformPath(renderer.transform,sourceRoot.transform)};
-                    work.Add(w);w.Codec=context.CreateContextualCodec(w.Binding,animation);w.Plan=w.Codec.Plan(w.Binding.Source,strength);
+                    var w=new BindingWork {Source=renderer,Binding=MeshBindingIdentity.Capture(sourceRoot,renderer,allowSkinning),Path=AnimationUtility.CalculateTransformPath(renderer.transform,sourceRoot.transform)};
+                    work.Add(w);w.Codec=w.Binding.IsSkinned?(IMeshCodec)context.CreateSkinningCodec(w.Binding,animation):context.CreateContextualCodec(w.Binding,animation);w.Plan=w.Codec.Plan(w.Binding.Source,strength);
                     var keys=context.RuntimeKey();
                     try
                     {
-                        w.Encoded=w.Codec.Encode(w.Binding.Source,w.Plan,keys);
+                        w.Encoded=w.Codec.Encode(w.Binding.Source,w.Plan,keys);w.EncodedHash=MeshBindingIdentity.ContentFingerprint(w.Encoded);
                         if(protectTextures)for(int slot=0;slot<renderer.sharedMaterials.Length;slot++)foreach(var material in animation.Materials(renderer,slot))
                         {
-                            var t=new TextureWork {Binding=GuardTextureBindingIdentity.Capture(w.Binding,animation,slot,material)};
+                            var t=new TextureWork {Binding=GuardTextureBindingIdentity.Capture(w.Binding,animation,slot,material,allowMipmaps)};
                             w.Textures.Add(MaterialKey(w,slot,material),t);
-                            t.Codec=context.CreateTextureCodec(t.Binding);t.Plan=t.Codec.Plan(t.Binding.Source);
+                            t.Codec=allowMipmaps?(ITextureCodec)context.CreateMipTextureCodec(t.Binding):context.CreateTextureCodec(t.Binding);t.Plan=t.Codec.Plan(t.Binding.Source);
                             t.Encoded=t.Codec.Encode(t.Binding.Source,t.Plan,keys);
                         }
                     }
@@ -153,11 +160,16 @@ namespace LinuxAvatarGuard
                 foreach(var w in work)
                 {
                     w.Folder=outputFolder+"/b_"+w.Binding.StableId.Substring(0,32);Directory.CreateDirectory(w.Folder);
-                    string program=StaticPolymorphicCodecV1.ProgramHash(w.Plan);
+                    string program=MeshProgramHash(w.Plan);
                     if(!protectTextures)w.Shaders=new GuardShaders(w.Folder,context.BuildId+"/"+w.Binding.StableId.Substring(0,16)+program.Substring(0,16),w.Codec.EmitDecoder(w.Plan),true);
                     w.Encoded.name="m_"+program.Substring(0,32);AssetDatabase.CreateAsset(w.Encoded,w.Folder+"/mesh.asset");
-                    var renderer=GuardAnimationContext.Resolve(copy,w.Path).GetComponent<MeshRenderer>();
-                    renderer.GetComponent<MeshFilter>().sharedMesh=w.Encoded;
+                    var renderer=GuardAnimationContext.Resolve(copy,w.Path).GetComponent<Renderer>();
+                    if(renderer is SkinnedMeshRenderer skin)
+                    {
+                        var original=(SkinnedMeshRenderer)w.Source;skin.sharedMesh=w.Encoded;skin.localBounds=original.localBounds;
+                        for(int shape=0;shape<original.sharedMesh.blendShapeCount;shape++)skin.SetBlendShapeWeight(shape,original.GetBlendShapeWeight(shape));
+                    }
+                    else renderer.GetComponent<MeshFilter>().sharedMesh=w.Encoded;
                     for(int slot=0;slot<w.Source.sharedMaterials.Length;slot++)foreach(var source in animation.Materials(w.Source,slot))
                     {
                         string key=MaterialKey(w,slot,source),token=Digest(key);
@@ -212,16 +224,17 @@ namespace LinuxAvatarGuard
                 }
                 copy.SetActive(sourceRoot.activeSelf);
                 if(!PrefabUtility.SaveAsPrefabAsset(copy,outputFolder+"/fixture.prefab"))throw new InvalidOperationException("No se pudo guardar el prefab generado.");
-                var manifest=new PublicManifest {forgeVersion=Version,codecVersion=StaticPolymorphicCodecV1.Version,codecId=StaticPolymorphicCodecV1.Id,
-                    buildId=context.BuildId,animationHash=animation.Fingerprint,status=protectTextures?"research-rigid-texture-context-only":"research-rigid-context-only",texturesProtected=protectTextures,
-                    bindings=work.Select(w=>new PublicBinding{bindingId=w.Binding.StableId,programHash=StaticPolymorphicCodecV1.ProgramHash(w.Plan),usageHash=w.Plan.AttributeUsageHash,
+                var manifest=new PublicManifest {forgeVersion=Version,codecVersion=StaticPolymorphicCodecV1.Version,codecId=work.Any(w=>w.Binding.IsSkinned)?"mixed-contextual-meshes":StaticPolymorphicCodecV1.Id,
+                    buildId=context.BuildId,animationHash=animation.Fingerprint,status=(allowMipmaps||allowSkinning)?"research-surface-context-only":protectTextures?"research-rigid-texture-context-only":"research-rigid-context-only",texturesProtected=protectTextures,skinningEnabled=allowSkinning,mipmapsEnabled=allowMipmaps,
+                    bindings=work.Select(w=>new PublicBinding{bindingId=w.Binding.StableId,programHash=MeshProgramHash(w.Plan),usageHash=w.Plan.AttributeUsageHash,codecId=w.Plan.Program.CodecId,codecVersion=w.Plan.Program.CodecVersion,skinned=w.Binding.IsSkinned,
                         mesh=w.Folder+"/mesh.asset",firstUv=w.Plan.Program.Attributes.FirstUvChannel,secondUv=w.Plan.Program.Attributes.SecondUvChannel,attributePolicy=w.Plan.Program.Attributes.PolicyVersion}).ToArray(),
                     textureBindings=work.SelectMany(w=>w.Textures.Select(p=>new PublicTexture{bindingId=p.Value.Binding.StableId,meshBindingId=w.Binding.StableId,
-                        slot=p.Value.Binding.Slot,property=p.Value.Binding.Property,codecVersion=TextureGuardCodecV1.Version,mipCount=1,
+                        slot=p.Value.Binding.Slot,property=p.Value.Binding.Property,codecId=p.Value.Plan.Program.CodecId,codecVersion=p.Value.Plan.Program.CodecVersion,mipCount=p.Value.Plan.Program.MipCount,
                         programHash=TextureGuardCodecV1.ProgramHash(p.Value.Plan),payload=p.Value.Folder+"/payload.asset",material=AssetDatabase.GetAssetPath(materials[p.Key])})).ToArray()};
                 File.WriteAllText(outputFolder+"/public-manifest.json",JsonUtility.ToJson(manifest,true));AssetDatabase.ImportAsset(outputFolder+"/public-manifest.json",ImportAssetOptions.ForceSynchronousImport);
-                animation.Validate();foreach(var w in work)w.Codec.Validate(w.Binding.Source,w.Plan);
+                animation.Validate();foreach(var w in work){w.Codec.Validate(w.Binding.Source,w.Plan);if(MeshBindingIdentity.ContentFingerprint(w.Encoded)!=w.EncodedHash)throw new InvalidOperationException("La malla codificada cambió durante la importación; se cancela la copia.");}
                 if(protectTextures)ValidateTextures(copy,work,materials,clips,animation,outputFolder);
+                if(allowSkinning)ValidateSkinning(copy,work,outputFolder);
                 var artifact=new GuardShaderArtifact(copy,outputFolder,work.SelectMany(w=>w.ShaderFamilies).SelectMany(s=>s.GeneratedAssetPaths).Distinct().OrderBy(p=>p,StringComparer.Ordinal).ToArray(),
                     work.SelectMany(w=>w.ShaderFamilies).SelectMany(s=>s.ProviderAssetPaths).Distinct().OrderBy(p=>p,StringComparer.Ordinal).ToArray(),clips);
                 context.RecordPlans(work.Select(w=>Tuple.Create(w.Binding,w.Plan)),animation,
@@ -241,12 +254,35 @@ namespace LinuxAvatarGuard
             }
             finally{foreach(var w in work)w.Dispose();}
         }
+        static void ValidateSkinning(GameObject copy,List<BindingWork> work,string outputFolder)
+        {
+            foreach(var w in work.Where(v=>v.Binding.IsSkinned))
+            {
+                var source=(SkinnedMeshRenderer)w.Source;var target=GuardAnimationContext.Resolve(copy,w.Path).GetComponent<SkinnedMeshRenderer>();var mesh=w.Encoded;
+                if(!target)throw new InvalidOperationException("SkinGuard: renderer ausente en la copia.");
+                if(target.sharedMesh!=mesh||target.quality!=source.quality||target.updateWhenOffscreen!=source.updateWhenOffscreen||target.skinnedMotionVectors!=source.skinnedMotionVectors||(!source.updateWhenOffscreen&&target.localBounds!=source.localBounds)||
+                    !target.bones.SequenceEqual(source.bones.Select(b=>GuardAnimationContext.Resolve(copy,AnimationUtility.CalculateTransformPath(b,w.Binding.Root.transform))))||
+                    target.rootBone!=GuardAnimationContext.Resolve(copy,AnimationUtility.CalculateTransformPath(source.rootBone,w.Binding.Root.transform))||
+                    !mesh.bindposes.SequenceEqual(w.Binding.Source.bindposes)||!mesh.boneWeights.SequenceEqual(w.Binding.Source.boneWeights)||
+                    !mesh.normals.SequenceEqual(w.Binding.Source.normals)||!mesh.tangents.SequenceEqual(w.Binding.Source.tangents)||mesh.blendShapeCount!=w.Binding.Source.blendShapeCount)
+                    throw new InvalidOperationException("SkinGuard: cambiaron pesos, bindposes, huesos, normales, tangentes o bounds en la copia: "+w.Binding.StableId+
+                        "; bounds="+target.localBounds+"/"+source.localBounds+
+                        "; bones="+target.bones.SequenceEqual(source.bones.Select(b=>GuardAnimationContext.Resolve(copy,AnimationUtility.CalculateTransformPath(b,w.Binding.Root.transform))))+
+                        "; bindposes="+mesh.bindposes.SequenceEqual(w.Binding.Source.bindposes)+"; weights="+mesh.boneWeights.SequenceEqual(w.Binding.Source.boneWeights)+
+                        "; normals="+mesh.normals.SequenceEqual(w.Binding.Source.normals)+"; tangents="+mesh.tangents.SequenceEqual(w.Binding.Source.tangents));
+                for(int shape=0;shape<mesh.blendShapeCount;shape++)
+                    if(mesh.GetBlendShapeName(shape)!=w.Binding.Source.GetBlendShapeName(shape)||mesh.GetBlendShapeFrameCount(shape)!=w.Binding.Source.GetBlendShapeFrameCount(shape)||target.GetBlendShapeWeight(shape)!=source.GetBlendShapeWeight(shape))
+                        throw new InvalidOperationException("SkinGuard: metadata/peso de blendshape modificado en la copia.");
+            }
+            var originals=new HashSet<string>(work.Select(w=>AssetDatabase.GetAssetPath(w.Binding.Source)),StringComparer.Ordinal);
+            if(AssetDatabase.GetDependencies(outputFolder+"/fixture.prefab",true).Any(originals.Contains))throw new InvalidOperationException("SkinGuard: dependencia de malla original en la copia final.");
+        }
         static void ValidateTextures(GameObject copy,List<BindingWork> work,Dictionary<string,Material> materials,
             Dictionary<AnimationClip,AnimationClip> clips,GuardAnimationContext animation,string outputFolder)
         {
             foreach(var w in work)
             {
-                var renderer=GuardAnimationContext.Resolve(copy,w.Path).GetComponent<MeshRenderer>();
+                var renderer=GuardAnimationContext.Resolve(copy,w.Path).GetComponent<Renderer>();
                 if(!renderer||!renderer.sharedMaterials.SequenceEqual(w.Source.sharedMaterials.Select((m,s)=>materials[MaterialKey(w,s,m)])))
                     throw new InvalidOperationException("TextureGuard: cambiaron los materiales del renderer generado.");
                 foreach(var pair in w.Textures)
@@ -255,10 +291,15 @@ namespace LinuxAvatarGuard
                     t.Codec.Validate(t.Binding.Source,t.Plan);
                     if(!m||m.shader!=t.Shader||m.GetTexture(t.Binding.Property)!=encoded||Enumerable.Range(0,4).Any(i=>m.GetFloat(GuardShaders.Property(i))!=0)||
                         !string.Equals(m.GetTag("DisableBatching",false,""),"True",StringComparison.OrdinalIgnoreCase)||
-                        !encoded||encoded.isReadable||encoded.isDataSRGB||encoded.mipmapCount!=1||encoded.width!=t.Plan.Program.Size||encoded.height!=t.Plan.Program.Size||
+                        !encoded||encoded.isReadable||encoded.isDataSRGB||encoded.mipmapCount!=t.Plan.Program.MipCount||encoded.width!=t.Plan.Program.Size||encoded.height!=t.Plan.Program.Size||
                         encoded.format!=TextureFormat.RGBA32||UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(encoded.graphicsFormat)||
-                        encoded.filterMode!=t.Plan.Program.Filter||encoded.wrapModeU!=t.Plan.Program.WrapU||encoded.wrapModeV!=t.Plan.Program.WrapV||encoded.mipMapBias!=t.Binding.Source.mipMapBias)
-                        throw new InvalidOperationException("TextureGuard: payload/material generado inválido o con claves serializadas.");
+                        encoded.filterMode!=t.Plan.Program.Filter||encoded.wrapModeU!=t.Plan.Program.WrapU||encoded.wrapModeV!=t.Plan.Program.WrapV||(t.Binding.MipmapsEnabled&&(encoded.mipMapBias!=t.Binding.Source.mipMapBias||!encoded.ignoreMipmapLimit)))
+                        throw new InvalidOperationException("TextureGuard: payload/material generado inválido o con claves serializadas: "+t.Binding.StableId+
+                            "; shader="+(m&&m.shader==t.Shader)+"; texture="+(m&&m.GetTexture(t.Binding.Property)==encoded)+
+                            "; batching="+(m?m.GetTag("DisableBatching",false,""):"missing")+
+                            "; mipCount="+(encoded?encoded.mipmapCount:-1)+"/"+t.Plan.Program.MipCount+
+                            "; mipBias="+(encoded?encoded.mipMapBias:0)+"/"+t.Binding.Source.mipMapBias+
+                            "; fullMips="+(encoded&&encoded.ignoreMipmapLimit)+"; filter="+(encoded?encoded.filterMode.ToString():"missing"));
                 }
             }
             foreach(var pair in clips)foreach(var b in AnimationUtility.GetObjectReferenceCurveBindings(pair.Key))

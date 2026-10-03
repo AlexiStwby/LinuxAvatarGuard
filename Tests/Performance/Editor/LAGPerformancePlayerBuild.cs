@@ -37,6 +37,17 @@ namespace LinuxAvatarGuard.Performance
             string mode=Environment.GetEnvironmentVariable("LAG_PERFORMANCE_MODE")??"isolated";
             if(mode=="isolated")new GameObject("OwnedPerformanceProbe").AddComponent<Probe>();
             else if(mode=="interleaved")new GameObject("OwnedPerformanceProbe").AddComponent<InterleavedProbe>();
+            else if(mode=="mip-skin-validation")
+            {
+                string skin=Environment.GetEnvironmentVariable("LAG_VALIDATION_GPU_SKINNING");
+                string color=Environment.GetEnvironmentVariable("LAG_VALIDATION_COLORSPACE");
+                if(skin!="true"&&skin!="false")throw new ArgumentException("Explicit GPU skinning setting required.");
+                if(color!="Gamma"&&color!="Linear")throw new ArgumentException("Explicit validation color space required.");
+                PlayerSettings.gpuSkinning=skin=="true";
+                PlayerSettings.colorSpace=color=="Linear"?ColorSpace.Linear:ColorSpace.Gamma;
+                PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone,skin=="true"?"LAG_TEST_GPU_SKINNING":"");
+                new GameObject("OwnedMipSkinProbe").AddComponent<MipSkinProbe>();
+            }
             else throw new ArgumentException("Unknown own-player performance mode.");
             EditorSceneManager.SaveScene(scene, "Assets/owned-performance.unity");
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
@@ -47,15 +58,16 @@ namespace LinuxAvatarGuard.Performance
                 success = report.summary.result == BuildResult.Succeeded, unity = Application.unityVersion,
                 seconds = report.summary.totalTime.TotalSeconds, bytes = (long)report.summary.totalSize,
                 errors = (int)report.summary.totalErrors, warnings = (int)report.summary.totalWarnings,
-                development = false, frameTimingStats = true, sdkIncluded = false
+                development = false, frameTimingStats = true, sdkIncluded = false,
+                mode=mode,gpuSkinning=PlayerSettings.gpuSkinning,colorSpace=PlayerSettings.colorSpace.ToString()
             }, true));
             if (report.summary.result != BuildResult.Succeeded) throw new Exception("Performance player build failed: " + report.summary.result);
             Debug.Log("LAG_PERFORMANCE_PLAYER_BUILD_SUCCESS");
         }
         [Serializable] sealed class PlayerBuildResult
         {
-            public string unity; public double seconds; public long bytes;
-            public int errors, warnings; public bool success, development, frameTimingStats, sdkIncluded;
+            public string unity,mode,colorSpace; public double seconds; public long bytes;
+            public int errors, warnings; public bool success, development, frameTimingStats, sdkIncluded,gpuSkinning;
         }
     }
 }

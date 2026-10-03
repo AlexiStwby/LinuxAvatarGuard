@@ -95,9 +95,9 @@ namespace LinuxAvatarGuard
             // lilToon's inspector can switch a protected material back to an unprotected shader.
             text = Regex.Replace(text, "CustomEditor\\s+\"[^\"]+\"", "CustomEditor \"LinuxAvatarGuard.ProtectedMaterialInspector\"");
             text = Regex.Replace(text, "Fallback\\s+\"[^\"]+\"", "Fallback Off");
-            if (decoder.CodecId == StaticPolymorphicCodecV1.Id)
+            if (decoder.CodecId == StaticPolymorphicCodecV1.Id || decoder.CodecId == SkinnedLinearCodecV1.Id)
             {
-                // The nonlinear decoder requires positions in each object's original coordinate system.
+                // Both research decoders require original object-space positions and normal carriers.
                 text = Regex.Replace(text, @"Tags\s*\{([^}]*)\}", match =>
                     match.Groups[1].Value.Contains("\"RenderType\"") ? "Tags {" + match.Groups[1].Value + " \"DisableBatching\" = \"True\" }" : match.Value);
             }

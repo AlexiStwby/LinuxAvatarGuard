@@ -31,6 +31,7 @@ namespace LinuxAvatarGuard
             public int schemaVersion = 1, codecVersion = TextureGuardCodecV1.Version, texturesProtected = 1;
             public string codec = TextureGuardCodecV1.Id, status = "ResearchOnly", programHash;
             public bool sdkProcessed = false, mipmapsSupported = false, compressedPayloadSupported = false;
+            public int mipCount=1;
         }
         internal static string MaterialState(Material material)
         {
@@ -61,6 +62,8 @@ namespace LinuxAvatarGuard
                     throw new InvalidOperationException("TextureGuard: la ruta contiene un enlace simbólico.");
         }
         public static GuardTextureArtifact Prepare(Material source, TextureGuardCodecV1 codec, string folder, int[] runtimeKey)
+            => Prepare(source,(ITextureCodec)codec,folder,runtimeKey);
+        public static GuardTextureArtifact Prepare(Material source,ITextureCodec codec,string folder,int[] runtimeKey)
         {
             if (codec == null) throw new ArgumentNullException(nameof(codec));
             OutputPath(folder); string state = MaterialState(source);
@@ -75,7 +78,7 @@ namespace LinuxAvatarGuard
                 AssetDatabase.CreateAsset(encoded, folder + "/t_" + hash.Substring(0, 20) + ".asset");
                 Directory.CreateDirectory(folder + "/shaders");
                 var keys = Enumerable.Range(0, 4).Select(GuardShaders.Property).ToArray();
-                var declarations = new DecoderFragment(TextureGuardCodecV1.Id, TextureGuardCodecV1.Version,
+                var declarations = new DecoderFragment(plan.Program.CodecId, plan.Program.CodecVersion,
                     "\nHLSLINCLUDE\n#define LIL_CUSTOM_PROPERTIES float _LAGKey0; float _LAGKey1; float _LAGKey2; float _LAGKey3;\nENDHLSL\n", keys);
                 var shaders = new GuardShaders(folder + "/shaders", "tex_" + hash.Substring(0, 20), declarations, true, decoder);
                 var shader = shaders.Copy(source.shader);
@@ -89,14 +92,16 @@ namespace LinuxAvatarGuard
                     if (!generated || !generated.isSupported || ShaderUtil.ShaderHasError(generated))
                         throw new InvalidOperationException("TextureGuard: shader/provider sin soporte o con errores: " + path);
                 }
-                File.WriteAllText(folder + "/public-manifest.json", JsonUtility.ToJson(new PublicManifest { programHash = hash }, true));
+                File.WriteAllText(folder + "/public-manifest.json", JsonUtility.ToJson(new PublicManifest { programHash = hash,codec=plan.Program.CodecId,codecVersion=plan.Program.CodecVersion,mipmapsSupported=plan.Program.MipmapsEnabled,mipCount=plan.Program.MipCount }, true));
                 AssetDatabase.ImportAsset(folder + "/public-manifest.json", ImportAssetOptions.ForceSynchronousImport);
                 if (MaterialState(source) != state || source.GetTexture("_MainTex") != texture)
                     throw new InvalidOperationException("TextureGuard: el material fuente cambió durante la preparación.");
                 codec.Validate(texture, plan);
                 if (material.GetTexture("_MainTex") != encoded || material.shader != shader || keys.Any(k => material.GetFloat(k) != 0) ||
-                    encoded.isReadable || encoded.isDataSRGB || encoded.mipmapCount != 1 || encoded.width != plan.Program.Size || encoded.height != plan.Program.Size ||
-                    encoded.format != TextureFormat.RGBA32 || UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(encoded.graphicsFormat))
+                    encoded.isReadable || encoded.isDataSRGB || encoded.mipmapCount != plan.Program.MipCount || encoded.width != plan.Program.Size || encoded.height != plan.Program.Size ||
+                    encoded.format != TextureFormat.RGBA32 || UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(encoded.graphicsFormat) ||
+                    encoded.filterMode!=plan.Program.Filter || encoded.wrapModeU!=plan.Program.WrapU || encoded.wrapModeV!=plan.Program.WrapV || encoded.anisoLevel!=0 ||
+                    (plan.Program.MipmapsEnabled && (!encoded.ignoreMipmapLimit || encoded.mipMapBias!=plan.Program.MipBias)))
                     throw new InvalidOperationException("TextureGuard: el artefacto generado cambió durante la importación o conserva claves serializadas.");
                 return new GuardTextureArtifact(material, encoded, folder, shaders, hash);
             }

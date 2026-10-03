@@ -19,7 +19,7 @@ namespace LinuxAvatarGuard
     public enum CodecOperationKind
     {
         LegacyNormalOffset = 1, AxisSwap = 2, AxisFlip = 3,
-        TriangularShear = 4, BoundedBend = 5, KeyedVectorOffset = 6
+        TriangularShear = 4, BoundedBend = 5, KeyedVectorOffset = 6, SkinnedNormalOffset = 7
     }
 
     public sealed class AttributeLayout
@@ -44,6 +44,10 @@ namespace LinuxAvatarGuard
         public ReadOnlyCollection<CodecOperationKind> Operations { get; }
         public ReadOnlyCollection<CodecInstruction> Instructions { get; }
         public AttributeLayout Attributes { get; }
+        public Vector4 SkinningWeights { get; }
+        internal CodecProgram(string id, int version, AttributeLayout attributes, Vector4 skinningWeights)
+            : this(id, version, attributes, CodecOperationKind.SkinnedNormalOffset)
+        { SkinningWeights = skinningWeights; }
         internal CodecProgram(string id, int version, AttributeLayout attributes, params CodecOperationKind[] operations)
         {
             CodecId = id; CodecVersion = version; SchemaVersion = 1; Attributes = attributes;

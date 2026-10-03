@@ -224,6 +224,34 @@ Por proceso, el DRM local total/residente sube ≈**14,03 MiB** con la variante 
 
 **Next stage:** Stage 13, MetadataGuard, conservando rutas/nombres/parámetros funcionales. Las ampliaciones de TextureGuard (pirámides por mip, minificación y formatos) y la validación de avatar/SDK quedan como requisitos abiertos antes de habilitar el asistente.
 
+## Stage 12 — Continuación: mipmaps y skinning
+
+**Status:** implementados y validados como APIs opt-in de investigación. [MIP_SKIN_RESEARCH.md](MIP_SKIN_RESEARCH.md) documenta la matemática, el contrato y la reproducción. El asistente y los binarios publicados conservan su ruta anterior; no se certifica un avatar Humanoid/SDK.
+
+**Changes:** `TextureGuardCodecV2` codifica cada nivel original por separado, conserva la pirámide sin regenerarla y usa LOD hardware con Point/Bilinear/Trilinear. `SkinnedLinearCodecV1` compensa posición y deltas de normal de blendshapes antes de skinning y resta el carrier de normal sin normalizar en el hook. No modifica bindposes, pesos, normales ni tangentes originales. Skinning reserva UV4/5 y exige UV6/7 libres. ShaderForge v3 combina ambos codecs en una copia mixta por binding/slot/material, audita mallas completas después de importar y restaura bounds estáticos/pesos iniciales de morph. Schema 5 conserva lectura 1–4 y rechaza downgrade de registros nuevos.
+
+**Tests:**
+
+| Suite / entorno | Resultado |
+| --- | --- |
+| Mips, Gamma + Linear | 377 + 377 checks; 144 comparaciones; 168 recuperaciones nativas byte exactas; 576 PNG. |
+| Superficie animada, Gamma + Linear | 108 + 111 checks; 24 comparaciones; 96 PNG; errores/control negativo correctos. |
+| Players Release propios, GPU Skinning on/off × Gamma/Linear | Cuatro ejecuciones correctas, 74 checks/12 comparaciones/48 PNG cada una. |
+| RenderDoc propio, pose con morphs activos | 18 dispatches de blendshape + 3 esqueléticos; 9 draws con posiciones PostVS leídas. |
+| Compatibilidad V1/schema 4 | 311 checks de integración Gamma; originales intactos. |
+| Regresiones previas + auditoría standalone V2 | 1341 + 3 checks, shaders/bundles; seis tests OSC. |
+| Importación sin SDK ni lilToon | APIs actuales compiladas; schemas 1/2/3/4/5 y texturas V1/V2 ejecutados. |
+
+Mayor diferencia RGB media de texturas: **0,000126392**; mayor diferencia media en los players: **0,0000595591**. La referencia CPU de posición tiene error máximo **1,87638×10⁻⁷ unidades**. `BakeMesh` siempre es referencia CPU: la evidencia de compute GPU proviene de la captura propia. Los originales/meta de fixtures permanecen byte idénticos. No se descargaron herramientas adicionales ni se analizó VRChat; se utilizó RenderDoc ya autorizado.
+
+La primera regresión completó sus aserciones y luego esperó trabajo asíncrono de paquetes hasta 300 segundos. Se añadió salida explícita del runner después de los reportes; los avisos conocidos de cierre del Editor/JobTempAlloc se conservan y no se certifica estabilidad o ausencia de fugas. Los players funcionales terminan con código 0; no son un benchmark de rendimiento.
+
+**Known issues:** codec skinned lineal y extractor adaptativo capaces de recuperación; PostVS observable. Fixtures con dos influencias y actualización offscreen activa; paletas de tres/cuatro influencias, rendering/culling offscreen deshabilitado, bordes del frustum, iluminación/stereo completos, compresión/streaming/calidad dinámica, Humanoid, artefacto SDK, wizard y presupuesto de rendimiento de V2 pendientes. La capa nueva resuelve compatibilidad demostrada; no elimina ripping por GPU.
+
+**Evidence:** archivos locales ignorados en `evidence/mip-skin/`: informes Gamma/Linear, cuatro players, captura propia, `RESULTS.json`, `skinning-comparison.png` y `mipmaps-comparison.png`. Evidencia anterior preservada en `prior-validation/` antes de repetir suites con rutas fijas. Checkpoint y hashes permiten continuar desde esta entrega.
+
+**Next stage:** ampliar las pruebas de avatar/culling y medir esta ruta; preparar integración y exportación de una nueva release únicamente después de sus gates. Las demás etapas 13–25 del roadmap continúan según la tabla.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -284,7 +312,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 9 | Performance benchmark | Benchmark rígido completado: 36 procesos, 24 rondas pareadas, 403.103 frames y recursos/ISA medidos; SDK/skinning pendientes. |
 | 10 | TextureGuard research | Investigación entregada; contrato/restricciones del piloto y criterios de calidad definidos. |
 | 11 | TextureGuard prototype | Piloto de albedo opaco validado: 586 checks Gamma/Linear, 128 comparaciones, 518 PNG y bundles Vulkan/Windows. |
-| 12 | TextureGuard integration | Integración rígida contextual y benchmark implementados; RGB24/ST, schema 4 y clips. Mips/compresión y avatar/SDK pendientes antes del asistente. |
+| 12 | TextureGuard integration | V1 rígida y benchmark implementados; continuación V2 de mipmaps y codec skinned lineal opt-in. Compresión/avatar SDK e integración en el asistente pendientes. |
 | 13 | MetadataGuard | Pendiente; preservar nombres funcionales y schema OSC legacy. |
 | 14 | Fingerprint research | Pendiente; definir amenazas, controles y detector. |
 | 15 | Mesh fingerprint | Pendiente; sobrevivir transformaciones y reorder con error visual medido. |

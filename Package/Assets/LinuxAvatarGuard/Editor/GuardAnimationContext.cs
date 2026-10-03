@@ -20,17 +20,18 @@ namespace LinuxAvatarGuard
         public string Fingerprint { get; }
         public ReadOnlyCollection<AnimationClip> Clips { get; }
         public bool TextureTransformsEnabled { get; }
+        public bool SkinningEnabled { get; }
         internal GameObject Root { get; }
         internal Animator Animator { get; }
         internal RuntimeAnimatorController Controller => Animator ? Animator.runtimeAnimatorController : null;
         readonly Dictionary<Renderer, HashSet<Material>[]> materials;
         readonly Dictionary<Renderer, HashSet<int>> selectors;
         GuardAnimationContext(GameObject root, Animator animator, Dictionary<Renderer,HashSet<Material>[]> mats,
-            Dictionary<Renderer,HashSet<int>> ids, AnimationClip[] clips, string hash, bool textureTransforms = false)
-        { Root=root; Animator=animator; materials=mats; selectors=ids; Clips=Array.AsReadOnly(clips); Fingerprint=hash; TextureTransformsEnabled=textureTransforms; }
+            Dictionary<Renderer,HashSet<int>> ids, AnimationClip[] clips, string hash, bool textureTransforms = false, bool skinning = false)
+        { Root=root; Animator=animator; materials=mats; selectors=ids; Clips=Array.AsReadOnly(clips); Fingerprint=hash; TextureTransformsEnabled=textureTransforms; SkinningEnabled=skinning; }
         public void Validate()
         {
-            if (!Root || Capture(Root,TextureTransformsEnabled).Fingerprint!=Fingerprint) throw new InvalidOperationException("Cambió el contexto de animación/materiales después del análisis.");
+            if (!Root || Capture(Root,TextureTransformsEnabled,SkinningEnabled).Fingerprint!=Fingerprint) throw new InvalidOperationException("Cambió el contexto de animación/materiales después del análisis.");
         }
         internal Material[] Materials(Renderer renderer) => materials[renderer].SelectMany(m=>m).Distinct().OrderBy(Identity,StringComparer.Ordinal).ToArray();
         internal Material[] Materials(Renderer renderer,int slot) => materials[renderer][slot].OrderBy(Identity,StringComparer.Ordinal).ToArray();
@@ -55,8 +56,8 @@ namespace LinuxAvatarGuard
         }
         internal Renderer RendererAt(EditorCurveBinding binding)
         {
-            var renderer=Resolve(Root,binding.path).GetComponent<MeshRenderer>();
-            if(!renderer || !materials.ContainsKey(renderer) || (binding.type!=typeof(MeshRenderer)&&binding.type!=typeof(Renderer)))
+            var renderer=Resolve(Root,binding.path).GetComponent<Renderer>();
+            if(!renderer || !materials.ContainsKey(renderer) || (binding.type!=renderer.GetType()&&binding.type!=typeof(Renderer)))
                 throw new InvalidOperationException("Binding de renderer sin contexto inequívoco.");
             return renderer;
         }
@@ -145,7 +146,7 @@ namespace LinuxAvatarGuard
                 type==ShaderUtil.ShaderPropertyType.Vector && component.Length==1&&"xyzw".Contains(component);
             if(!allowed)throw new InvalidOperationException("Tipo/componente de propiedad animada no revisado.");
         }
-        public static GuardAnimationContext Capture(GameObject root, bool allowTextureTransforms = false)
+        public static GuardAnimationContext Capture(GameObject root, bool allowTextureTransforms = false, bool allowSkinning = false)
         {
             if(!root)throw new ArgumentNullException(nameof(root));
             var animators=root.GetComponentsInChildren<Animator>(true);
@@ -155,7 +156,8 @@ namespace LinuxAvatarGuard
             var mats=new Dictionary<Renderer,HashSet<Material>[]>();var ids=new Dictionary<Renderer,HashSet<int>>();
             foreach(var renderer in root.GetComponentsInChildren<Renderer>(true))
             {
-                var mesh=StaticPolymorphicCodecV1.RequireStaticRenderer(renderer);StaticPolymorphicCodecV1.ValidateSource(mesh,.1f,false);
+                var mesh=allowSkinning && renderer is SkinnedMeshRenderer skin ? SkinnedLinearCodecV1.RequireRenderer(root,skin) : StaticPolymorphicCodecV1.RequireStaticRenderer(renderer);
+                if(!(allowSkinning && renderer is SkinnedMeshRenderer))StaticPolymorphicCodecV1.ValidateSource(mesh,.1f,false);
                 if(renderer.sharedMaterials.Length!=mesh.subMeshCount||renderer.sharedMaterials.Any(m=>!m))throw new InvalidOperationException("Materiales/submeshes contextuales incompletos.");
                 mats.Add(renderer,renderer.sharedMaterials.Select(m=>new HashSet<Material>{m}).ToArray());ids.Add(renderer,new HashSet<int>());
             }
@@ -163,7 +165,7 @@ namespace LinuxAvatarGuard
             var clips=new HashSet<AnimationClip>();var files=new HashSet<string>();
             if(animator)Controllers(animator.runtimeAnimatorController,new HashSet<RuntimeAnimatorController>(),clips,files);
             if(clips.Count>256)throw new InvalidOperationException("Demasiados clips para el contrato contextual.");
-            var context=new GuardAnimationContext(root,animator,mats,ids,clips.OrderBy(Identity,StringComparer.Ordinal).ToArray(),null,allowTextureTransforms);
+            var context=new GuardAnimationContext(root,animator,mats,ids,clips.OrderBy(Identity,StringComparer.Ordinal).ToArray(),null,allowTextureTransforms,allowSkinning);
             foreach(var clip in context.Clips)
             {
                 CleanAsset(clip,files);
@@ -185,6 +187,8 @@ namespace LinuxAvatarGuard
                     {
                         var r=context.RendererAt(binding);
                         if(binding.propertyName=="m_Enabled")continue;
+                        if(allowSkinning && r is SkinnedMeshRenderer skin && binding.propertyName.StartsWith("blendShape.",StringComparison.Ordinal))
+                        {if(skin.sharedMesh.GetBlendShapeIndex(binding.propertyName.Substring(11))<0)throw new InvalidOperationException("SkinGuard: blendshape animado ausente.");continue;}
                         if(!binding.propertyName.StartsWith("material.",StringComparison.Ordinal))throw new InvalidOperationException("Propiedad animada de renderer no revisada.");
                         string property=Regex.Replace(binding.propertyName.Substring(9),@"\.[rgbaxyzw]$","");
                         if(property.StartsWith("_LAG",StringComparison.Ordinal))throw new InvalidOperationException("No se permiten claves/propiedades guard animadas de entrada.");
@@ -219,13 +223,14 @@ namespace LinuxAvatarGuard
                     w.Write("LAG/animation-context/v1");w.Write(Version);w.Write(animator!=null);
                     // The original policy retains its exact fingerprint for private schemas 1–3.
                     if(allowTextureTransforms)w.Write("LAG/texture-transform-policy/v1");
+                    if(allowSkinning)w.Write("LAG/skinning-animation-policy/v1");
                     if(animator){w.Write(Identity(animator.runtimeAnimatorController));w.Write(animator.enabled);w.Write((int)animator.updateMode);w.Write((int)animator.cullingMode);}
                     foreach(string file in files.OrderBy(f=>f,StringComparer.Ordinal))
                     {w.Write(AssetDatabase.AssetPathToGUID(file));w.Write(MeshBindingIdentity.Digest(File.ReadAllBytes(file)));}
                     foreach(var r in mats.Keys.OrderBy(r=>AnimationUtility.CalculateTransformPath(r.transform,root.transform),StringComparer.Ordinal))
-                    {w.Write(MeshBindingIdentity.Capture(root,r).StableId);foreach(var slot in mats[r]){w.Write(slot.Count);foreach(var m in slot.OrderBy(Identity,StringComparer.Ordinal))w.Write(Identity(m));}foreach(int v in ids[r].OrderBy(v=>v))w.Write(v);w.Write(-1);}
+                    {w.Write(MeshBindingIdentity.Capture(root,r,allowSkinning).StableId);foreach(var slot in mats[r]){w.Write(slot.Count);foreach(var m in slot.OrderBy(Identity,StringComparer.Ordinal))w.Write(Identity(m));}foreach(int v in ids[r].OrderBy(v=>v))w.Write(v);w.Write(-1);}
                 }
-                return new GuardAnimationContext(root,animator,mats,ids,context.Clips.ToArray(),MeshBindingIdentity.Digest(stream.ToArray()),allowTextureTransforms);
+                return new GuardAnimationContext(root,animator,mats,ids,context.Clips.ToArray(),MeshBindingIdentity.Digest(stream.ToArray()),allowTextureTransforms,allowSkinning);
             }
         }
     }

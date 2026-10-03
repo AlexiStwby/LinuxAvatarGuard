@@ -53,8 +53,8 @@ namespace LinuxAvatarGuard
         }
         static void RequireStaticContext(GameObject root, Renderer renderer, GuardAnimationContext animation)
         {
-            var meshRenderer = (MeshRenderer)renderer;
-            if (meshRenderer.additionalVertexStreams || meshRenderer.enlightenVertexStream || renderer.isPartOfStaticBatch)
+            var meshRenderer = renderer as MeshRenderer;
+            if ((meshRenderer && (meshRenderer.additionalVertexStreams || meshRenderer.enlightenVertexStream)) || renderer.isPartOfStaticBatch)
                 throw new InvalidOperationException("Vertex streams/batching adicionales no analizados: se cancela la asignación.");
             // Even disabled controllers/scripts can later change materials or their semantic properties.
             for (var node = root.transform; node; node = node.parent)
@@ -156,6 +156,7 @@ namespace LinuxAvatarGuard
             if(animation!=null)materials=animation.Materials(binding.Renderer);
             var available = new HashSet<int>(new[] { 4, 5, 6, 7 });
             var reserved = new List<string> { "UV0–3: lilToon shading/decals/AudioLink; colors/tangents: preserved" };
+            if(binding.IsSkinned){available.Remove(4);available.Remove(5);reserved.Add("UV4/5: conservatively reserved for skinned previous-position/velocity streams");}
             foreach (int channel in available.ToArray())
                 if (mesh.HasVertexAttribute((VertexAttribute)((int)VertexAttribute.TexCoord0 + channel)))
                 { available.Remove(channel); reserved.Add("UV" + channel + ": existing vertex attribute (any dimension/format)"); }

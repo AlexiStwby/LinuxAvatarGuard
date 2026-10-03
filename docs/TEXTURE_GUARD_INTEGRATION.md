@@ -2,6 +2,8 @@
 
 Stage 12. Unity **2022.3.22f1**, Linux/Vulkan, Built-in y fuentes de **lilToon 2.3.4** con el digest revisado. El asistente de avatares continúa usando la ruta legacy que ya fue probada; esta API no prepara un avatar skinned para publicar.
 
+La [continuación de mipmaps/skinning](MIP_SKIN_RESEARCH.md) incorpora APIs nuevas y schema 5. Este documento conserva el contrato y las mediciones de V1/Stage 12. Los registros V1 de schema 4 siguen siendo legibles; los nuevos registros no se degradan a esa versión.
+
 ## Qué integra
 
 `GuardShaderForge.PrepareWithTextures` analiza la raíz, sus mallas rígidas, el Animator genérico y todos los materiales que pueden aparecer en cada slot. Genera una copia independiente de meshes, albedos, materiales, clips, controllers, BlendTrees y overrides. Los originales y sus importadores permanecen intactos.

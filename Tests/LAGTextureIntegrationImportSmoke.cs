@@ -18,7 +18,7 @@ public static class LAGTextureIntegrationImportSmoke
             Application.platform!=RuntimePlatform.LinuxEditor||SystemInfo.graphicsDeviceType!=GraphicsDeviceType.Vulkan)
             throw new InvalidOperationException("Only the explicitly enabled disposable SDK-free import project is allowed.");
         if(typeof(GuardWindow).Assembly.GetType("LinuxAvatarGuard.GuardBuilder")!=null||Shader.Find("lilToon")||
-            GuardBuildContext.SchemaVersion!=4||GuardShaderForge.Version!=2||GuardTextureBindingIdentity.SchemaVersion!=1)
+            GuardBuildContext.SchemaVersion!=5||GuardShaderForge.Version!=3||GuardTextureBindingIdentity.SchemaVersion!=1)
             throw new Exception("Unexpected SDK/lilToon or unavailable contextual API versions.");
         const string folder="Assets/TextureIntegrationApiSmoke";
         string old=Environment.GetEnvironmentVariable("XDG_DATA_HOME"),scratch=Path.Combine(Path.GetTempPath(),"lag-texture-import-"+Guid.NewGuid().ToString("N"));
@@ -38,9 +38,9 @@ public static class LAGTextureIntegrationImportSmoke
                 try
                 {
                     context.RecordPlan(binding,plan);string path=context.SavePrivate(),json=File.ReadAllText(path);
-                    foreach(int schema in new[]{1,2,3,4})
+                    foreach(int schema in new[]{1,2,3,4,5})
                     {
-                        File.WriteAllText(path,json.Replace("\"schemaVersion\": 4","\"schemaVersion\": "+schema));
+                        File.WriteAllText(path,json.Replace("\"schemaVersion\": 5","\"schemaVersion\": "+schema));
                         using(var restored=GuardBuildContext.LoadPrivate(context.BuildId))using(var replay=restored.CreateCodec(binding))
                         {
                             var copy=replay.Encode(mesh,replay.Plan(mesh,.1f),restored.RuntimeKey());
@@ -61,9 +61,13 @@ public static class LAGTextureIntegrationImportSmoke
                 try{if(encoded.isReadable||plan.BindingStableId!=null||!codec.EmitDecoder(plan).Functions.Contains("_MainTex.Load"))throw new Exception("Standalone texture API changed unexpectedly.");}
                 finally{Object.DestroyImmediate(encoded);}
             }
-            Directory.CreateDirectory("../evidence/texture-integration");
-            File.WriteAllText("../evidence/texture-integration/sdk-free.json","{\"compiledWithoutSdkOrLilToon\":true,\"schemasReproduced\":[1,2,3,4],\"privateMeshReproduction\":true,\"standaloneTextureApiExecuted\":true,\"contextualTextureApiAvailable\":true,\"contextualTextureForgeExecuted\":false,\"graphics\":\"Vulkan\"}");
-            Debug.Log("LAG_TEXTURE_INTEGRATION_SDK_FREE_SUCCESS schemas 1/2/3/4 and standalone texture API");
+            var mipSource=new Texture2D(16,16,TextureFormat.RGBA32,true,false){filterMode=FilterMode.Trilinear,anisoLevel=0};
+            for(int level=0;level<mipSource.mipmapCount;level++){int size=Math.Max(1,16>>level);mipSource.SetPixels32(Enumerable.Repeat(new Color32((byte)(level*41),123,211,255),size*size).ToArray(),level);}mipSource.Apply(false);AssetDatabase.CreateAsset(mipSource,folder+"/mips.asset");AssetDatabase.SaveAssetIfDirty(mipSource);
+            using(var codec=new TextureGuardCodecV2(new byte[32],"owned-mip-api-smoke"))
+            {var plan=codec.Plan(mipSource);var encoded=codec.Encode(mipSource,plan,new[]{0,62,93,124});try{if(encoded.mipmapCount!=5||encoded.isReadable||!encoded.ignoreMipmapLimit||plan.Program.Mips[4].Grid!=1||!codec.EmitDecoder(plan).Functions.Contains("CalculateLevelOfDetail"))throw new Exception("Mip API contract failed.");}finally{Object.DestroyImmediate(encoded);}}
+            Directory.CreateDirectory("../evidence/mip-skin");
+            File.WriteAllText("../evidence/mip-skin/sdk-free.json","{\"compiledWithoutSdkOrLilToon\":true,\"schemasReproduced\":[1,2,3,4,5],\"privateMeshReproduction\":true,\"standaloneTextureApiExecuted\":true,\"textureV2ApiExecuted\":true,\"skinningApiAvailable\":true,\"contextualTextureApiAvailable\":true,\"contextualTextureForgeExecuted\":false,\"graphics\":\"Vulkan\"}");
+            Debug.Log("LAG_TEXTURE_INTEGRATION_SDK_FREE_SUCCESS schemas 1/2/3/4/5 and texture V1/V2 APIs");
         }
         finally{Object.DestroyImmediate(root);if(AssetDatabase.IsValidFolder(folder))AssetDatabase.DeleteAsset(folder);Environment.SetEnvironmentVariable("XDG_DATA_HOME",old);Directory.Delete(scratch,true);}
     }

@@ -35,9 +35,13 @@ namespace LinuxAvatarGuard
     // Public instructions contain salts and mapping, never seed or expected runtime values.
     public sealed class TextureProgram
     {
-        public string CodecId => TextureGuardCodecV1.Id;
-        public int CodecVersion => TextureGuardCodecV1.Version;
-        public int SchemaVersion => 1;
+        public string CodecId => MipmapsEnabled ? TextureGuardCodecV2.Id : TextureGuardCodecV1.Id;
+        public int CodecVersion => MipmapsEnabled ? TextureGuardCodecV2.Version : TextureGuardCodecV1.Version;
+        public int SchemaVersion => MipmapsEnabled ? 2 : 1;
+        public bool MipmapsEnabled { get; }
+        public int MipCount => MipmapsEnabled ? Mips.Count : 1;
+        public float MipBias { get; }
+        public ReadOnlyCollection<TextureMipProgram> Mips { get; }
         public int Size { get; }
         public bool SourceSRGB { get; }
         public FilterMode Filter { get; }
@@ -46,10 +50,13 @@ namespace LinuxAvatarGuard
         public ReadOnlyCollection<TextureTile> Tiles { get; }
         internal TextureProgram(Texture2D source, TextureTile[] tiles)
         {
-            Size = source.width; SourceSRGB = source.isDataSRGB;
+            Size = source.width; SourceSRGB = source.isDataSRGB; MipBias = source.mipMapBias;
             Filter = source.filterMode; WrapU = source.wrapModeU; WrapV = source.wrapModeV;
             Tiles = Array.AsReadOnly((TextureTile[])tiles.Clone());
+            Mips = Array.AsReadOnly(Array.Empty<TextureMipProgram>());
         }
+        internal TextureProgram(Texture2D source, TextureMipProgram[] mips) : this(source, mips[0].Tiles.ToArray())
+        { MipmapsEnabled = true; Mips = Array.AsReadOnly((TextureMipProgram[])mips.Clone()); }
     }
 
     public sealed class TexturePlan
@@ -106,13 +113,13 @@ namespace LinuxAvatarGuard
                 GraphicsSettings.currentRenderPipeline != null || Application.unityVersion != "2022.3.22f1")
                 throw new InvalidOperationException("TextureGuard experimental: solo Unity 2022.3.22f1, Linux, Vulkan y Built-in revisados.");
         }
-        internal static void RequireSource(Texture2D source, bool allowRgb24 = false)
+        internal static void RequireSource(Texture2D source, bool allowRgb24 = false, bool allowMips = false)
         {
-            if (!source || !source.isReadable || (source.format != TextureFormat.RGBA32 && !(allowRgb24 && source.format == TextureFormat.RGB24)) || source.mipmapCount != 1 || source.streamingMipmaps)
+            if (!source || !source.isReadable || (source.format != TextureFormat.RGBA32 && !(allowRgb24 && source.format == TextureFormat.RGB24)) || (!allowMips && source.mipmapCount != 1) || source.streamingMipmaps)
                 throw new InvalidOperationException("TextureGuard: fuente legible RGBA32 (o RGB24 contextual), sin compresión, mipmaps ni streaming requerida; no se modifica el importador.");
             if (source.width != source.height || source.width < 16 || source.width > 1024 || (source.width & (source.width - 1)) != 0)
                 throw new InvalidOperationException("TextureGuard: tamaño cuadrado power-of-two entre 16 y 1024 requerido.");
-            if ((source.filterMode != FilterMode.Point && source.filterMode != FilterMode.Bilinear) || source.anisoLevel > 1 ||
+            if ((source.filterMode != FilterMode.Point && source.filterMode != FilterMode.Bilinear && !(allowMips && source.filterMode == FilterMode.Trilinear)) || source.anisoLevel > 1 ||
                 !SupportedWrap(source.wrapModeU) || !SupportedWrap(source.wrapModeV))
                 throw new InvalidOperationException("TextureGuard: solo Point/Bilinear y Repeat/Clamp por eje, sin anisotropía.");
             if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(source, out string guid, out long localId) ||
@@ -120,22 +127,23 @@ namespace LinuxAvatarGuard
                 throw new InvalidOperationException("TextureGuard: guarda la fuente persistente antes de analizarla.");
             var importer = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(source));
             if (importer is TextureImporter textureImporter &&
-                (textureImporter.textureType != TextureImporterType.Default || textureImporter.mipmapEnabled || textureImporter.streamingMipmaps ||
+                (textureImporter.textureType != TextureImporterType.Default || (!allowMips && textureImporter.mipmapEnabled) || textureImporter.streamingMipmaps ||
                  textureImporter.textureCompression != TextureImporterCompression.Uncompressed))
                 throw new InvalidOperationException("TextureGuard: importador Default, sin compresión/mipmaps/streaming requerido.");
-            if (source.format == TextureFormat.RGBA32 && source.GetPixelData<Color32>(0).Any(p => p.a != 255))
+            if (source.format == TextureFormat.RGBA32 && Enumerable.Range(0,allowMips ? source.mipmapCount : 1).Any(m=>source.GetPixelData<Color32>(m).Any(p => p.a != 255)))
                 throw new InvalidOperationException("TextureGuard: solo albedo con todos los texels opacos; alfa transparente/cutout pendiente.");
         }
         static bool SupportedWrap(TextureWrapMode mode) => mode == TextureWrapMode.Clamp || mode == TextureWrapMode.Repeat;
-        internal static string Fingerprint(Texture2D source, bool allowRgb24 = false)
+        internal static string Fingerprint(Texture2D source, bool allowRgb24 = false, bool allowMips = false)
         {
-            RequireSource(source, allowRgb24);
+            RequireSource(source, allowRgb24, allowMips);
             using (var stream = new MemoryStream())
             {
                 using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
                 {
                     AssetDatabase.TryGetGUIDAndLocalFileIdentifier(source, out string guid, out long id);
-                    writer.Write("LAG/texture-source/v1"); writer.Write(guid); writer.Write(id);
+                    writer.Write(allowMips ? "LAG/texture-source-mips/v2" : "LAG/texture-source/v1"); writer.Write(guid); writer.Write(id);
+                    if(allowMips){writer.Write(source.mipmapCount);writer.Write(source.ignoreMipmapLimit);}
                     writer.Write(source.width); writer.Write(source.height); writer.Write((int)source.format); writer.Write(source.isDataSRGB);
                     writer.Write((int)source.filterMode); writer.Write((int)source.wrapModeU); writer.Write((int)source.wrapModeV);
                     writer.Write(source.anisoLevel); writer.Write(source.mipMapBias);
@@ -220,6 +228,7 @@ namespace LinuxAvatarGuard
         public static string ProgramHash(TexturePlan plan)
         {
             if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (plan.Program.MipmapsEnabled) return TextureGuardCodecV2.ProgramHash(plan);
             var p = plan.Program;
             using (var stream = new MemoryStream())
             {
@@ -289,7 +298,7 @@ namespace LinuxAvatarGuard
         }
         public void Dispose()
         { if (disposed) return; disposed = true; Array.Clear(seed, 0, seed.Length); if (expectedRuntimeKey != null) Array.Clear(expectedRuntimeKey, 0, expectedRuntimeKey.Length); }
-        sealed class TextureStream : IDisposable
+        internal sealed class TextureStream : IDisposable
         {
             readonly HMACSHA256 hmac;
             byte[] block = Array.Empty<byte>(); int cursor; uint counter;

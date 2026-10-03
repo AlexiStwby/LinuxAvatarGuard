@@ -246,9 +246,16 @@ public static class LAGTextureIntegrationValidation
             }
         }
         string path=c.SavePrivate();string text=File.ReadAllText(path);
-        Check(text.Contains("\"schemaVersion\": 4")&&text.Contains("\"textureBindingSchema\": 1"),"schema 4 stores explicit texture codec/binding version privately");
+        Check(text.Contains("\"schemaVersion\": "+GuardBuildContext.SchemaVersion)&&text.Contains("\"textureBindingSchema\": 1"),"current schema stores explicit texture codec/binding version privately");
+        try
+        {
+            File.WriteAllText(path,text.Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion,"\"schemaVersion\": 4"));
+            using(var old=GuardBuildContext.LoadPrivate(c.BuildId))
+                Check(old.TextureBindingCount==8&&old.RuntimeKey().SequenceEqual(c.RuntimeKey()),"schema 4 V1 texture records preserve count and historical runtime keys");
+        }
+        finally{File.WriteAllText(path,text);}
         foreach(var mutation in new[]{
-            text.Replace("\"schemaVersion\": 4","\"schemaVersion\": 3"),
+            text.Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion,"\"schemaVersion\": 3"),
             text.Replace("\"textureCodecVersion\": 1","\"textureCodecVersion\": 99"),
             text.Replace("\"textureBindingSchema\": 1","\"textureBindingSchema\": 0"),
             text.Replace("\"property\": \"_MainTex\"","\"property\": \"_NormalMap\""),
