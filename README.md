@@ -50,6 +50,8 @@ La [continuación de mipmaps y skinning](docs/MIP_SKIN_RESEARCH.md) añade una p
 
 La [investigación de FingerprintGuard (etapa 14)](docs/FINGERPRINT_RESEARCH.md) incorpora una identidad privada de 256 bits independiente de OSC y un estudio reproducible por CPU de marcas geométricas y de albedo. El [piloto geométrico de la etapa 15](docs/MESH_FINGERPRINT_PROTOTYPE.md) añade un núcleo Float32 probado por CPU y un adaptador Unity compilado para generar copias estáticas con respaldo privado. La ejecución del adaptador, la apariencia, FBX y SDK siguen pendientes. Se registran límites de cobertura, recorte, compresión y atribución ambigua; el verificador aún no ofrece confianza calibrada. Estas APIs de investigación permanecen fuera del asistente y del unitypackage estable.
 
+El [piloto de marcas de albedo (etapa 16)](docs/TEXTURE_FINGERPRINT_PROTOTYPE.md) incorpora DCT/QIM versionado sobre copias opacas RGB8, con límites de calidad y autoverificación. Incluye 187 comprobaciones por CPU y 1.086 observaciones contrastadas entre C# y Python, además de PNG/JPEG/DDS, resize, color y mipmaps simulados. Compresión y recorte pueden borrar la señal; combinar dos copias puede dar varios candidatos. El adaptador de textura/material para lilToon está compilado y pendiente de ejecución en Unity, Gamma/Linear, compresión nativa y SDK. No activa una opción nueva en el asistente.
+
 Pruebas OSC, desde la raíz del repositorio:
 
 ```sh
