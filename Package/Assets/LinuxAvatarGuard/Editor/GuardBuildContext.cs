@@ -11,14 +11,16 @@ namespace LinuxAvatarGuard
     // Research context, not a GuardProfile and never an avatar upload readiness certificate.
     public sealed class GuardBuildContext : IDisposable
     {
-        public const int SchemaVersion = 3;
+        public const int SchemaVersion = 4;
         public string BuildId { get; }
         public string CreatedUtc { get; }
         readonly byte[] masterSeed;
         readonly Dictionary<string, BindingRecord> bindings = new Dictionary<string, BindingRecord>();
+        readonly Dictionary<string, TextureRecord> textures = new Dictionary<string, TextureRecord>();
         readonly bool restored;
         bool disposed;
         public int BindingCount => bindings.Count;
+        public int TextureBindingCount => textures.Count;
         GuardBuildContext(string buildId, byte[] seed, string created, bool restored)
         {
             if (!MeshKeyDerivation.IsHex(buildId, 32) || seed == null || seed.Length != 32)
@@ -42,6 +44,35 @@ namespace LinuxAvatarGuard
         public StaticPolymorphicCodecV1 CreateDynamicCodec(MeshBindingIdentity binding) => CreateCodecCore(binding, true);
         public StaticPolymorphicCodecV1 CreateContextualCodec(MeshBindingIdentity binding, GuardAnimationContext animation)
         {if(animation==null)throw new ArgumentNullException(nameof(animation));return CreateCodecCore(binding,true,animation);}
+        public TextureGuardCodecV1 CreateTextureCodec(GuardTextureBindingIdentity binding)
+        {
+            Alive(); if (binding == null) throw new ArgumentNullException(nameof(binding)); binding.Validate();
+            if (restored && (!bindings.ContainsKey(binding.MeshBindingId) || !textures.ContainsKey(binding.StableId)))
+                throw new InvalidOperationException("El binding de textura no pertenece al contexto privado restaurado.");
+            byte[] salt = null, derived = null; int[] runtime = null;
+            try
+            {
+                // A separate typed HKDF domain; historical mesh/runtime derivation stays byte-identical.
+                using (var hash = SHA256.Create()) salt = hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes("LAG/texture-build-salt/v1\0" + BuildId));
+                var info = System.Text.Encoding.UTF8.GetBytes("LAG/texture-binding-kdf/v1\0" + TextureGuardCodecV1.Id + "\0" +
+                    TextureGuardCodecV1.Version + "\0" + BuildId + "\0" + binding.StableId);
+                derived = MeshKeyDerivation.HkdfSha256(masterSeed, salt, info, 32); runtime = RuntimeKey();
+                var codec = new TextureGuardCodecV1(derived, binding, runtime);
+                try
+                {
+                    if (textures.TryGetValue(binding.StableId, out var record) && JsonUtility.ToJson(record) !=
+                        JsonUtility.ToJson(TextureRecordOf(binding, codec.Plan(binding.Source))))
+                        throw new InvalidOperationException("El registro privado de textura no corresponde al programa reproducido.");
+                    return codec;
+                }
+                catch { codec.Dispose(); throw; }
+            }
+            finally
+            {
+                if (salt != null) Array.Clear(salt, 0, salt.Length); if (derived != null) Array.Clear(derived, 0, derived.Length);
+                if (runtime != null) Array.Clear(runtime, 0, runtime.Length);
+            }
+        }
         StaticPolymorphicCodecV1 CreateCodecCore(MeshBindingIdentity binding, bool dynamicAttributes, GuardAnimationContext animation=null)
         {
             Alive(); if (binding == null) throw new ArgumentNullException(nameof(binding)); binding.Validate();
@@ -117,11 +148,38 @@ namespace LinuxAvatarGuard
                 bindings[binding.StableId] = record;
             }
         }
-        internal void RecordPlans(IEnumerable<Tuple<MeshBindingIdentity,CodecPlan>> plans,GuardAnimationContext animation)
+        public void RecordTexturePlan(GuardTextureBindingIdentity binding, TexturePlan plan)
+        {
+            Alive();
+            if (binding == null || plan == null || plan.BindingStableId != binding.StableId || plan.Source != binding.Source ||
+                !bindings.TryGetValue(binding.MeshBindingId, out var mesh) || mesh.attributePolicy != AttributeAllocator.ContextualPolicyVersion)
+                throw new ArgumentException("El plan de textura requiere su binding de malla contextual registrado.");
+            binding.Validate();
+            using (var expected = CreateTextureCodec(binding))
+            {
+                var record = TextureRecordOf(binding, plan);
+                if (JsonUtility.ToJson(record) != JsonUtility.ToJson(TextureRecordOf(binding, expected.Plan(binding.Source))))
+                    throw new InvalidOperationException("El programa de textura no pertenece a este contexto.");
+                if (textures.TryGetValue(binding.StableId, out var old) && JsonUtility.ToJson(old) != JsonUtility.ToJson(record))
+                    throw new InvalidOperationException("Un binding de textura registrado no puede cambiar dentro del mismo BuildID.");
+                textures[binding.StableId] = record;
+            }
+        }
+        static TextureRecord TextureRecordOf(GuardTextureBindingIdentity binding, TexturePlan plan) => new TextureRecord {
+            stableId = binding.StableId, meshBindingId = binding.MeshBindingId, slot = binding.Slot, property = binding.Property,
+            sourceGuid = binding.SourceGuid, sourceLocalFileId = binding.SourceLocalFileId,
+            materialGuid = binding.MaterialGuid, materialLocalFileId = binding.MaterialLocalFileId,
+            sourceFingerprint = plan.SourceFingerprint, contextFingerprint = binding.ContextFingerprint, programHash = TextureGuardCodecV1.ProgramHash(plan)
+        };
+        internal void RecordPlans(IEnumerable<Tuple<MeshBindingIdentity,CodecPlan>> plans,GuardAnimationContext animation,
+            IEnumerable<Tuple<GuardTextureBindingIdentity,TexturePlan>> texturePlans = null)
         {
             var before=new Dictionary<string,BindingRecord>(bindings);
-            try{foreach(var p in plans)RecordPlan(p.Item1,p.Item2,animation);}
-            catch{bindings.Clear();foreach(var p in before)bindings.Add(p.Key,p.Value);throw;}
+            var beforeTextures=new Dictionary<string,TextureRecord>(textures);
+            try
+            {foreach(var p in plans)RecordPlan(p.Item1,p.Item2,animation);if(texturePlans!=null)foreach(var p in texturePlans)RecordTexturePlan(p.Item1,p.Item2);}
+            catch
+            {bindings.Clear();foreach(var p in before)bindings.Add(p.Key,p.Value);textures.Clear();foreach(var p in beforeTextures)textures.Add(p.Key,p.Value);throw;}
         }
         public string SavePrivate()
         {
@@ -129,17 +187,25 @@ namespace LinuxAvatarGuard
             var dto = new PrivateContext { schemaVersion = SchemaVersion, derivationVersion = MeshKeyDerivation.Version, bindingSchema = MeshBindingIdentity.SchemaVersion,
                 codecId = StaticPolymorphicCodecV1.Id, codecVersion = StaticPolymorphicCodecV1.Version,
                 buildId = BuildId, masterSeedBase64 = Convert.ToBase64String(masterSeed), createdUtc = CreatedUtc,
-                bindings = bindings.Values.OrderBy(b => b.stableId, StringComparer.Ordinal).ToArray() };
+                bindings = bindings.Values.OrderBy(b => b.stableId, StringComparer.Ordinal).ToArray(),
+                textureBindingSchema = textures.Count == 0 ? 0 : GuardTextureBindingIdentity.SchemaVersion,
+                textureCodecId = textures.Count == 0 ? null : TextureGuardCodecV1.Id, textureCodecVersion = textures.Count == 0 ? 0 : TextureGuardCodecV1.Version,
+                textures = textures.Values.OrderBy(t => t.stableId, StringComparer.Ordinal).ToArray() };
             try { return GuardPrivateContextStore.Create(BuildId, JsonUtility.ToJson(dto, true)); }
             finally { dto.masterSeedBase64 = null; } // Managed JSON/string copies are not guaranteed to be erased.
         }
         public static GuardBuildContext LoadPrivate(string buildId)
         {
             var dto = JsonUtility.FromJson<PrivateContext>(GuardPrivateContextStore.Read(buildId));
-            if (dto == null || (dto.schemaVersion != 1 && dto.schemaVersion != 2 && dto.schemaVersion != SchemaVersion) || dto.derivationVersion != MeshKeyDerivation.Version ||
+            if (dto == null || dto.schemaVersion < 1 || dto.schemaVersion > SchemaVersion || dto.derivationVersion != MeshKeyDerivation.Version ||
                 dto.codecId != StaticPolymorphicCodecV1.Id || dto.codecVersion != StaticPolymorphicCodecV1.Version || dto.buildId != buildId ||
                 dto.bindingSchema != MeshBindingIdentity.SchemaVersion || dto.bindings == null || dto.bindings.Length == 0 || dto.bindings.Length > 4096)
                 throw new InvalidOperationException("Schema/codec/contexto privado incompatible.");
+            bool hasTextures = dto.textures != null && dto.textures.Length > 0;
+            if (hasTextures ? dto.schemaVersion != SchemaVersion || dto.textures.Length > 4096 ||
+                dto.textureBindingSchema != GuardTextureBindingIdentity.SchemaVersion || dto.textureCodecId != TextureGuardCodecV1.Id || dto.textureCodecVersion != TextureGuardCodecV1.Version :
+                dto.textureBindingSchema != 0 || !string.IsNullOrEmpty(dto.textureCodecId) || dto.textureCodecVersion != 0)
+                throw new InvalidOperationException("Schema/codec de textura privado incompatible; no puede degradarse a un schema anterior.");
             byte[] seed = null; GuardBuildContext context = null;
             try
             {
@@ -165,6 +231,16 @@ namespace LinuxAvatarGuard
                         throw new InvalidOperationException("Layout/política de atributos privada incompatible.");
                     context.bindings.Add(b.stableId, b);
                 }
+                foreach (var t in dto.textures ?? Array.Empty<TextureRecord>())
+                {
+                    if (t == null || !MeshKeyDerivation.IsHex(t.stableId, 64) || !MeshKeyDerivation.IsHex(t.meshBindingId, 64) ||
+                        !context.bindings.TryGetValue(t.meshBindingId, out var parent) || parent.attributePolicy != AttributeAllocator.ContextualPolicyVersion ||
+                        t.slot < 0 || t.slot > 255 || t.property != "_MainTex" || !MeshKeyDerivation.IsHex(t.sourceGuid, 32) || t.sourceLocalFileId == 0 ||
+                        !MeshKeyDerivation.IsHex(t.materialGuid, 32) || t.materialLocalFileId == 0 || !MeshKeyDerivation.IsHex(t.sourceFingerprint, 64) ||
+                        !MeshKeyDerivation.IsHex(t.contextFingerprint, 64) || !MeshKeyDerivation.IsHex(t.programHash, 64) || context.textures.ContainsKey(t.stableId))
+                        throw new InvalidOperationException("Registro de textura privado inválido/duplicado.");
+                    context.textures.Add(t.stableId, t);
+                }
                 return context;
             }
             catch { context?.Dispose(); throw; }
@@ -176,12 +252,21 @@ namespace LinuxAvatarGuard
             public string stableId, contentHash, sourceGuid, programHash; public long localFileId; public float strength;
             public int firstUv, secondUv, components, attributePolicy; public string usageHash;
         }
+        [Serializable] sealed class TextureRecord
+        {
+            public string stableId, meshBindingId, property, sourceGuid, materialGuid, sourceFingerprint, contextFingerprint, programHash;
+            public int slot;
+            public long sourceLocalFileId, materialLocalFileId;
+        }
         // No public JSON/export method; this DTO is only passed to the private store.
         [Serializable] sealed class PrivateContext
         {
             public int schemaVersion, derivationVersion, bindingSchema, codecVersion;
             public string codecId;
             public string buildId, createdUtc, masterSeedBase64; public BindingRecord[] bindings;
+            public int textureBindingSchema, textureCodecVersion;
+            public string textureCodecId;
+            public TextureRecord[] textures;
         }
     }
 }

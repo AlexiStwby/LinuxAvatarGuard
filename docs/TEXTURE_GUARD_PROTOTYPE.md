@@ -45,7 +45,7 @@ using (var codec = new TextureGuardCodecV1(privateSeed32Bytes, materialScope))
 }
 ```
 
-El caller es responsable de conservar seed/scope/runtime fuera de Assets si necesita reproducir el experimento en otra sesión. El piloto no registra nuevos perfiles OSC ni modifica el private schema 3 del MeshGuard existente; la persistencia integrada pertenecerá a Stage 12.
+El caller es responsable de conservar seed/scope/runtime fuera de Assets si necesita reproducir el experimento en otra sesión. El piloto standalone no registra nuevos perfiles OSC. La [integración contextual de Stage 12](TEXTURE_GUARD_INTEGRATION.md) aporta persistencia privada schema 4 con lectura de los schemas anteriores; el caller standalone sigue siendo responsable de seed/scope/runtime.
 
 Al construir un bundle de prueba, incluir explícitamente textura/material generados, prefab, manifest y `ShaderAssetPaths`, incluidos los providers. Revisar el grafo completo de dependencias. `AssetBundle.LoadAllAssets` no enumera necesariamente objetos presentes solo como dependencias; su ausencia de la lista no prueba ausencia del bundle. La suite enumera las salidas explícitas y verifica además los bindings del prefab reabierto y el grafo de autoría.
 
@@ -69,6 +69,6 @@ El payload no se usa como albedo directamente. El extractor del test interpreta 
 
 La prueba inicial del bundle descubrió un fallo de inserción sobre `//#include`, corregido con anclaje de includes activos y una regresión específica. El primer inventario de `LoadAllAssets<Texture2D>` devolvió cero porque se habían empaquetado las texturas solo como dependencias; se corrigió la enumeración del harness y se añadió revisión de dependencias/bindings. Ninguno de esos primeros intentos se cuenta como ejecución final correcta.
 
-Todavía falta medir este decoder en un player propio con el método de Stage 9; el tiempo de `Camera.Render` no constituye un benchmark. Los counters/avisos del Editor al cerrar tampoco se presentan como VRAM física ni como prueba de ausencia de leaks.
+Stage 12 mide el decoder combinado con MeshGuard en un player propio mediante el método de Stage 9; sus cifras no describen toda la matriz de materiales del piloto standalone. El tiempo de `Camera.Render` no constituye un benchmark. Los counters/avisos del Editor al cerrar tampoco se presentan como VRAM física ni como prueba de ausencia de leaks.
 
-Stage 12 deberá integrar planes por binding/slot, persistencia privada, remapeo de materiales/clips y validación del artefacto final; ampliar formatos/mipmaps y medir calidad/coste antes de exponer una opción en el asistente. La ruta productiva y sus manifests siguen declarando cero texturas protegidas. Carukia y el cliente VRChat no forman parte de las pruebas de este piloto.
+La integración contextual de Stage 12 implementa planes por binding/slot, persistencia privada, remapeo de materiales/clips, RGB24, ST animado y validación del artefacto final. Todavía faltan mipmaps, compresión y validación de funciones de avatar/SDK antes de exponer una opción en el asistente. La ruta productiva y sus manifests siguen declarando cero texturas protegidas. Carukia y el cliente VRChat no forman parte de las pruebas de este piloto.

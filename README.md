@@ -42,6 +42,8 @@ El [benchmark de rendimiento](docs/PERFORMANCE_BENCHMARK.md) compara original, l
 
 La [investigación de TextureGuard](docs/TEXTURE_GUARD_RESEARCH.md) y su [piloto de albedo opaco](docs/TEXTURE_GUARD_PROTOTYPE.md) añaden copias de textura/material con programas reproducibles por fuente/scope. Se validan Gamma/Linear, Point/Bilinear, Repeat/Clamp y bundles Vulkan/Windows con 586 comprobaciones y 518 imágenes de contenido propio. El extractor específico sigue recuperando los datos al disponer del HLSL y los parámetros. Es una API de investigación sin integración en el asistente; fuentes con mipmaps/compresión y funciones completas de avatar requieren las siguientes etapas.
 
+La [integración contextual de TextureGuard](docs/TEXTURE_GUARD_INTEGRATION.md) añade albedos por renderer/slot/material, respaldo privado schema 4 compatible con schemas anteriores, RGB24 y remapeo de material swaps y ST animado. La copia combina los decoders de geometría y albedo y valida sus dependencias sin modificar los originales. Se prueba en fixtures rígidas propias y se mide en un player Linux/Vulkan independiente; mipmaps, compresión, skinning y postprocesamiento del SDK siguen pendientes antes de llevarla al asistente.
+
 Pruebas OSC, desde la raíz del repositorio:
 
 ```sh

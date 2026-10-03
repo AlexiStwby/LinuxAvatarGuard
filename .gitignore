@@ -21,6 +21,7 @@
 !/docs/PERFORMANCE_BENCHMARK.md
 !/docs/TEXTURE_GUARD_RESEARCH.md
 !/docs/TEXTURE_GUARD_PROTOTYPE.md
+!/docs/TEXTURE_GUARD_INTEGRATION.md
 !/docs/CODEC_DIVERSITY_RESULTS.md
 
 /Package/*
@@ -51,6 +52,8 @@
 !/Tests/LAGShaderForgeValidation.cs
 !/Tests/LAGPerformanceValidation.cs
 !/Tests/LAGTextureValidation.cs
+!/Tests/LAGTextureIntegrationValidation.cs
+!/Tests/LAGTextureIntegrationImportSmoke.cs
 !/Tests/Performance/
 
 /dist/*

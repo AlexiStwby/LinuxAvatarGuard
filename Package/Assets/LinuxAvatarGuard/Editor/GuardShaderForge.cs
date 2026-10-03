@@ -35,7 +35,18 @@ namespace LinuxAvatarGuard
     // Explicit research API. The avatar wizard and GuardBuilder keep the proven legacy route.
     public static class GuardShaderForge
     {
-        public const int Version=1;
+        public const int Version=2;
+        sealed class TextureWork : IDisposable
+        {
+            public GuardTextureBindingIdentity Binding;
+            public TextureGuardCodecV1 Codec;
+            public TexturePlan Plan;
+            public Texture2D Encoded;
+            public GuardShaders Shaders;
+            public Shader Shader;
+            public string Folder;
+            public void Dispose(){Codec?.Dispose();if(Encoded&&!AssetDatabase.Contains(Encoded))Object.DestroyImmediate(Encoded);}
+        }
         sealed class BindingWork : IDisposable
         {
             public Renderer Source;
@@ -45,7 +56,9 @@ namespace LinuxAvatarGuard
             public Mesh Encoded;
             public GuardShaders Shaders;
             public string Path,Folder;
-            public void Dispose(){Codec?.Dispose();if(Encoded&&!AssetDatabase.Contains(Encoded))Object.DestroyImmediate(Encoded);}
+            public readonly Dictionary<string,TextureWork> Textures=new Dictionary<string,TextureWork>();
+            public IEnumerable<GuardShaders> ShaderFamilies => Textures.Count==0 ? new[]{Shaders} : Textures.Values.Select(t=>t.Shaders);
+            public void Dispose(){Codec?.Dispose();foreach(var t in Textures.Values)t.Dispose();if(Encoded&&!AssetDatabase.Contains(Encoded))Object.DestroyImmediate(Encoded);}
         }
         [Serializable] sealed class PublicBinding
         {
@@ -58,13 +71,19 @@ namespace LinuxAvatarGuard
             public string buildId,codecId,animationHash,status;
             public bool sdkProcessed=false,skinningValidated=false,texturesProtected=false;
             public PublicBinding[] bindings;
+            public PublicTexture[] textureBindings;
+        }
+        [Serializable] sealed class PublicTexture
+        {
+            public string bindingId,meshBindingId,property,programHash,payload,material;
+            public int slot,codecVersion,mipCount;
         }
         static string Digest(string value)=>MeshBindingIdentity.Digest(Encoding.UTF8.GetBytes(value));
         static string MaterialKey(BindingWork w,int slot,Material material) => w.Binding.StableId+"/"+slot+"/"+GuardAnimationContext.Identity(material)+"/"+
             StaticPolymorphicCodecV1.ProgramHash(w.Plan)+"/"+w.Plan.Program.Attributes.FirstUvChannel+"/"+w.Plan.Program.Attributes.SecondUvChannel+"/"+GuardAnimationContext.Identity(material.shader);
         static void OutputPath(string folder)
         {
-            if(folder==null || !Regex.IsMatch(folder,@"^Assets/LinuxAvatarGuardGenerated/Research/[A-Za-z0-9_-]{1,64}$"))
+            if(folder==null || !Regex.IsMatch(folder,@"\AAssets/LinuxAvatarGuardGenerated/Research/[A-Za-z0-9_-]{1,64}\z"))
                 throw new ArgumentException("La salida de investigación debe ser una carpeta nueva en Assets/LinuxAvatarGuardGenerated/Research/.");
             if(Directory.Exists(folder)||File.Exists(folder)||File.Exists(folder+".meta"))throw new InvalidOperationException("La carpeta de salida ya existe; no se sobrescribe.");
             for(string parent=Path.GetDirectoryName(Path.GetFullPath(folder));!string.IsNullOrEmpty(parent);parent=Path.GetDirectoryName(parent))
@@ -86,10 +105,16 @@ namespace LinuxAvatarGuard
             }
         }
         public static GuardShaderArtifact Prepare(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength=.15f)
+            => PrepareCore(sourceRoot,context,outputFolder,strength,false);
+        // Explicit research opt-in. Every possible material's opaque albedo must pass the positive contract.
+        public static GuardShaderArtifact PrepareWithTextures(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength=.15f)
+            => PrepareCore(sourceRoot,context,outputFolder,strength,true);
+        static GuardShaderArtifact PrepareCore(GameObject sourceRoot,GuardBuildContext context,string outputFolder,float strength,bool protectTextures)
         {
             if(!sourceRoot||context==null)throw new ArgumentNullException("Fuente/contexto");
+            if(!protectTextures&&context.TextureBindingCount!=0)throw new InvalidOperationException("El contexto contiene texturas; usa PrepareWithTextures para conservar su protección.");
             OutputPath(outputFolder);Components(sourceRoot);
-            var animation=GuardAnimationContext.Capture(sourceRoot);
+            var animation=GuardAnimationContext.Capture(sourceRoot,protectTextures);
             var work=new List<BindingWork>();GameObject copy=null;bool owned=false;
             var materials=new Dictionary<string,Material>();var clips=new Dictionary<AnimationClip,AnimationClip>();
             try
@@ -99,9 +124,29 @@ namespace LinuxAvatarGuard
                 {
                     var w=new BindingWork {Source=renderer,Binding=MeshBindingIdentity.Capture(sourceRoot,renderer),Path=AnimationUtility.CalculateTransformPath(renderer.transform,sourceRoot.transform)};
                     work.Add(w);w.Codec=context.CreateContextualCodec(w.Binding,animation);w.Plan=w.Codec.Plan(w.Binding.Source,strength);
-                    w.Encoded=w.Codec.Encode(w.Binding.Source,w.Plan,context.RuntimeKey());
+                    var keys=context.RuntimeKey();
+                    try
+                    {
+                        w.Encoded=w.Codec.Encode(w.Binding.Source,w.Plan,keys);
+                        if(protectTextures)for(int slot=0;slot<renderer.sharedMaterials.Length;slot++)foreach(var material in animation.Materials(renderer,slot))
+                        {
+                            var t=new TextureWork {Binding=GuardTextureBindingIdentity.Capture(w.Binding,animation,slot,material)};
+                            w.Textures.Add(MaterialKey(w,slot,material),t);
+                            t.Codec=context.CreateTextureCodec(t.Binding);t.Plan=t.Codec.Plan(t.Binding.Source);
+                            t.Encoded=t.Codec.Encode(t.Binding.Source,t.Plan,keys);
+                        }
+                    }
+                    finally{Array.Clear(keys,0,keys.Length);}
                 }
                 animation.Validate();
+                if(protectTextures)
+                {
+                    var protectedSources=new HashSet<Texture>(work.SelectMany(w=>w.Textures.Values).Select(t=>(Texture)t.Binding.Source));
+                    foreach(var material in work.SelectMany(w=>w.Textures.Values).Select(t=>t.Binding.Material).Distinct())
+                        foreach(string property in material.GetTexturePropertyNames())
+                            if(property!="_MainTex"&&protectedSources.Contains(material.GetTexture(property)))
+                                throw new InvalidOperationException("TextureGuard: un albedo también está referenciado por una propiedad sin proteger: "+property);
+                }
                 Directory.CreateDirectory(outputFolder);owned=true;AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 copy=Object.Instantiate(sourceRoot);copy.name="LAG_"+context.BuildId;copy.SetActive(false);
                 if(PrefabUtility.IsPartOfPrefabInstance(copy))PrefabUtility.UnpackPrefabInstance(copy,PrefabUnpackMode.Completely,InteractionMode.AutomatedAction);
@@ -109,15 +154,27 @@ namespace LinuxAvatarGuard
                 {
                     w.Folder=outputFolder+"/b_"+w.Binding.StableId.Substring(0,32);Directory.CreateDirectory(w.Folder);
                     string program=StaticPolymorphicCodecV1.ProgramHash(w.Plan);
-                    w.Shaders=new GuardShaders(w.Folder,context.BuildId+"/"+w.Binding.StableId.Substring(0,16)+program.Substring(0,16),w.Codec.EmitDecoder(w.Plan),true);
+                    if(!protectTextures)w.Shaders=new GuardShaders(w.Folder,context.BuildId+"/"+w.Binding.StableId.Substring(0,16)+program.Substring(0,16),w.Codec.EmitDecoder(w.Plan),true);
                     w.Encoded.name="m_"+program.Substring(0,32);AssetDatabase.CreateAsset(w.Encoded,w.Folder+"/mesh.asset");
                     var renderer=GuardAnimationContext.Resolve(copy,w.Path).GetComponent<MeshRenderer>();
                     renderer.GetComponent<MeshFilter>().sharedMesh=w.Encoded;
                     for(int slot=0;slot<w.Source.sharedMaterials.Length;slot++)foreach(var source in animation.Materials(w.Source,slot))
                     {
                         string key=MaterialKey(w,slot,source),token=Digest(key);
-                        var material=new Material(source){name="m_"+token.Substring(0,32),shader=w.Shaders.Copy(source.shader),hideFlags=HideFlags.None};
+                        TextureWork t=null;Shader shader;
+                        if(protectTextures)
+                        {
+                            t=w.Textures[key];t.Folder=w.Folder+"/t_"+t.Binding.StableId.Substring(0,32);Directory.CreateDirectory(t.Folder);
+                            AssetDatabase.CreateAsset(t.Encoded,t.Folder+"/payload.asset");
+                            string textureProgram=TextureGuardCodecV1.ProgramHash(t.Plan);
+                            t.Shaders=new GuardShaders(t.Folder,context.BuildId+"/"+program.Substring(0,16)+"/"+textureProgram.Substring(0,32),
+                                w.Codec.EmitDecoder(w.Plan),true,t.Codec.EmitDecoder(t.Plan));
+                            shader=t.Shader=t.Shaders.Copy(source.shader);if(w.Shaders==null)w.Shaders=t.Shaders;
+                        }
+                        else shader=w.Shaders.Copy(source.shader);
+                        var material=new Material(source){name="m_"+token.Substring(0,32),shader=shader,hideFlags=HideFlags.None};
                         material.renderQueue=source.renderQueue;
+                        if(t!=null)material.SetTexture(t.Binding.Property,t.Encoded);
                         for(int i=0;i<4;i++)material.SetFloat(GuardShaders.Property(i),0);
                         AssetDatabase.CreateAsset(material,w.Folder+"/m_"+token+".mat");materials.Add(key,material);
                     }
@@ -144,7 +201,7 @@ namespace LinuxAvatarGuard
                     var graph=new GuardAssets(outputFolder,work[0].Shaders,copyClip);
                     copy.GetComponent<Animator>().runtimeAnimatorController=(RuntimeAnimatorController)graph.Copy(animation.Controller);
                 }
-                foreach(var path in work.SelectMany(w=>w.Shaders.GeneratedAssetPaths))
+                foreach(var path in work.SelectMany(w=>w.ShaderFamilies).SelectMany(s=>s.GeneratedAssetPaths))
                 {
                     var shader=AssetDatabase.LoadAssetAtPath<Shader>(path);
                     if(!shader||!shader.isSupported||ShaderUtil.ShaderHasError(shader))throw new InvalidOperationException("Shader generado sin compilación/soporte Vulkan: "+path);
@@ -156,14 +213,19 @@ namespace LinuxAvatarGuard
                 copy.SetActive(sourceRoot.activeSelf);
                 if(!PrefabUtility.SaveAsPrefabAsset(copy,outputFolder+"/fixture.prefab"))throw new InvalidOperationException("No se pudo guardar el prefab generado.");
                 var manifest=new PublicManifest {forgeVersion=Version,codecVersion=StaticPolymorphicCodecV1.Version,codecId=StaticPolymorphicCodecV1.Id,
-                    buildId=context.BuildId,animationHash=animation.Fingerprint,status="research-rigid-context-only",
+                    buildId=context.BuildId,animationHash=animation.Fingerprint,status=protectTextures?"research-rigid-texture-context-only":"research-rigid-context-only",texturesProtected=protectTextures,
                     bindings=work.Select(w=>new PublicBinding{bindingId=w.Binding.StableId,programHash=StaticPolymorphicCodecV1.ProgramHash(w.Plan),usageHash=w.Plan.AttributeUsageHash,
-                        mesh=w.Folder+"/mesh.asset",firstUv=w.Plan.Program.Attributes.FirstUvChannel,secondUv=w.Plan.Program.Attributes.SecondUvChannel,attributePolicy=w.Plan.Program.Attributes.PolicyVersion}).ToArray()};
+                        mesh=w.Folder+"/mesh.asset",firstUv=w.Plan.Program.Attributes.FirstUvChannel,secondUv=w.Plan.Program.Attributes.SecondUvChannel,attributePolicy=w.Plan.Program.Attributes.PolicyVersion}).ToArray(),
+                    textureBindings=work.SelectMany(w=>w.Textures.Select(p=>new PublicTexture{bindingId=p.Value.Binding.StableId,meshBindingId=w.Binding.StableId,
+                        slot=p.Value.Binding.Slot,property=p.Value.Binding.Property,codecVersion=TextureGuardCodecV1.Version,mipCount=1,
+                        programHash=TextureGuardCodecV1.ProgramHash(p.Value.Plan),payload=p.Value.Folder+"/payload.asset",material=AssetDatabase.GetAssetPath(materials[p.Key])})).ToArray()};
                 File.WriteAllText(outputFolder+"/public-manifest.json",JsonUtility.ToJson(manifest,true));AssetDatabase.ImportAsset(outputFolder+"/public-manifest.json",ImportAssetOptions.ForceSynchronousImport);
                 animation.Validate();foreach(var w in work)w.Codec.Validate(w.Binding.Source,w.Plan);
-                var artifact=new GuardShaderArtifact(copy,outputFolder,work.SelectMany(w=>w.Shaders.GeneratedAssetPaths).Distinct().OrderBy(p=>p,StringComparer.Ordinal).ToArray(),
-                    work.SelectMany(w=>w.Shaders.ProviderAssetPaths).Distinct().OrderBy(p=>p,StringComparer.Ordinal).ToArray(),clips);
-                context.RecordPlans(work.Select(w=>Tuple.Create(w.Binding,w.Plan)),animation);
+                if(protectTextures)ValidateTextures(copy,work,materials,clips,animation,outputFolder);
+                var artifact=new GuardShaderArtifact(copy,outputFolder,work.SelectMany(w=>w.ShaderFamilies).SelectMany(s=>s.GeneratedAssetPaths).Distinct().OrderBy(p=>p,StringComparer.Ordinal).ToArray(),
+                    work.SelectMany(w=>w.ShaderFamilies).SelectMany(s=>s.ProviderAssetPaths).Distinct().OrderBy(p=>p,StringComparer.Ordinal).ToArray(),clips);
+                context.RecordPlans(work.Select(w=>Tuple.Create(w.Binding,w.Plan)),animation,
+                    work.SelectMany(w=>w.Textures.Values).Select(t=>Tuple.Create(t.Binding,t.Plan)));
                 return artifact;
             }
             catch
@@ -178,6 +240,37 @@ namespace LinuxAvatarGuard
                 throw;
             }
             finally{foreach(var w in work)w.Dispose();}
+        }
+        static void ValidateTextures(GameObject copy,List<BindingWork> work,Dictionary<string,Material> materials,
+            Dictionary<AnimationClip,AnimationClip> clips,GuardAnimationContext animation,string outputFolder)
+        {
+            foreach(var w in work)
+            {
+                var renderer=GuardAnimationContext.Resolve(copy,w.Path).GetComponent<MeshRenderer>();
+                if(!renderer||!renderer.sharedMaterials.SequenceEqual(w.Source.sharedMaterials.Select((m,s)=>materials[MaterialKey(w,s,m)])))
+                    throw new InvalidOperationException("TextureGuard: cambiaron los materiales del renderer generado.");
+                foreach(var pair in w.Textures)
+                {
+                    var t=pair.Value;var m=materials[pair.Key];var encoded=t.Encoded;
+                    t.Codec.Validate(t.Binding.Source,t.Plan);
+                    if(!m||m.shader!=t.Shader||m.GetTexture(t.Binding.Property)!=encoded||Enumerable.Range(0,4).Any(i=>m.GetFloat(GuardShaders.Property(i))!=0)||
+                        !string.Equals(m.GetTag("DisableBatching",false,""),"True",StringComparison.OrdinalIgnoreCase)||
+                        !encoded||encoded.isReadable||encoded.isDataSRGB||encoded.mipmapCount!=1||encoded.width!=t.Plan.Program.Size||encoded.height!=t.Plan.Program.Size||
+                        encoded.format!=TextureFormat.RGBA32||UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(encoded.graphicsFormat)||
+                        encoded.filterMode!=t.Plan.Program.Filter||encoded.wrapModeU!=t.Plan.Program.WrapU||encoded.wrapModeV!=t.Plan.Program.WrapV||encoded.mipMapBias!=t.Binding.Source.mipMapBias)
+                        throw new InvalidOperationException("TextureGuard: payload/material generado inválido o con claves serializadas.");
+                }
+            }
+            foreach(var pair in clips)foreach(var b in AnimationUtility.GetObjectReferenceCurveBindings(pair.Key))
+            {
+                var w=work.Single(v=>v.Source==animation.RendererAt(b));int slot=GuardAnimationContext.MaterialSlot(b);
+                var original=AnimationUtility.GetObjectReferenceCurve(pair.Key,b);var remapped=AnimationUtility.GetObjectReferenceCurve(pair.Value,b);
+                if(original.Length!=remapped.Length||original.Where((f,i)=>f.time!=remapped[i].time||remapped[i].value!=materials[MaterialKey(w,slot,(Material)f.value)]).Any())
+                    throw new InvalidOperationException("TextureGuard: cambió un swap de material del clip generado.");
+            }
+            var forbidden=new HashSet<string>(work.SelectMany(w=>w.Textures.Values).SelectMany(t=>new[]{AssetDatabase.GetAssetPath(t.Binding.Source),AssetDatabase.GetAssetPath(t.Binding.Material)}),StringComparer.Ordinal);
+            if(AssetDatabase.GetDependencies(outputFolder+"/fixture.prefab",true).Any(forbidden.Contains))
+                throw new InvalidOperationException("TextureGuard: el prefab todavía referencia un albedo/material fuente por una ruta sin proteger.");
         }
     }
 }

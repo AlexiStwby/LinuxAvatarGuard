@@ -180,6 +180,50 @@ La suite completa anterior conserva 18 + 26 + 14 + 25 = 83 comprobaciones correc
 
 **Next stage:** Stage 12, integración contextual por binding/slot, respaldo privado y remapeo de materiales/clips, seguida de ampliaciones de formatos/mipmaps con presupuesto de calidad/coste. Mantener fuera del asistente hasta validar el artefacto procesado y las funciones de avatar admitidas. El manifiesto productivo sigue reportando cero texturas protegidas.
 
+## Stage 12 — TextureGuard integration
+
+**Status:** integración contextual de investigación implementada para mallas rígidas/Animator genérico. La ruta productiva, skinning y artefacto procesado por SDK continúan pendientes; no se añade una opción al asistente.
+
+**Changes:** [GuardTextureBinding.cs](../Package/Assets/LinuxAvatarGuard/Editor/GuardTextureBinding.cs) identifica renderer/slot/material/albedo y su fuente/contexto. `GuardBuildContext` deriva seeds mediante HKDF con dominio de textura y guarda registros privados **schema 4**, conservando schemas 1/2/3 y las claves históricas de malla. `GuardShaderForge.PrepareWithTextures` combina decoders, copia payloads/materiales y remapea clips/controllers/BlendTrees/overrides por ocurrencia. Registro por lote de mallas/texturas con rollback conjunto, rechazo de fuentes originales en dependencias finales, alias de albedo sin proteger, mutaciones tardías y claves guardadas distintas de cero. RGB24 se convierte solamente en el payload nuevo; ST animado opt-in preservado. Claves contextualizadas admiten bytes individuales cero y deben coincidir con el contexto. Contrato/API: [TEXTURE_GUARD_INTEGRATION.md](TEXTURE_GUARD_INTEGRATION.md).
+
+**Tests:** [LAGTextureIntegrationValidation.cs](../Tests/LAGTextureIntegrationValidation.cs), **309 Gamma + 309 Linear = 618 comprobaciones**, **44 comparaciones nativas y 168 PNG**. Compara bundles Vulkan reabiertos con las fuentes, material swaps, cuatro canales de ST, los tres canales de color, dos renderers separados y evaluación real de nested BlendTrees/overrides. También comprueba reproducción byte idéntica de programas/payloads, esquemas privados adversariales, lanes runtime individuales cero y transacciones con cuatro mutaciones tardías. **32 payloads** recuperados byte idénticos por el extractor independiente; esto confirma su reversibilidad. Cuatro bundles Linux/Vulkan reabiertos y cuatro Windows64 compilados en total; la compilación Windows se comprueba separadamente de la ejecución Vulkan. Los archivos/importadores/fuentes lilToon originales permanecieron byte idénticos. Ambas ejecuciones terminaron con código 0, sin errores C#/shader ni excepciones de la suite.
+
+| Matriz de integración | Gamma | Linear |
+| --- | ---: | ---: |
+| Mayor error medio desbloqueado, canales 0–1 | 0,00002673 | 0,00006607 |
+| Mayor diferencia de canal RGBA8 | ≈1/255 | ≈2/255 |
+| Menor diferencia media sin claves | 0,06705 | 0,06616 |
+| Menor diferencia media con claves incorrectas | 0,06621 | 0,05599 |
+| Payloads / shaders generados | 16 / 32 | 16 / 32 |
+| Bytes de payload / píxeles fuente | 262.144 / 57.344 | 262.144 / 57.344 |
+| Bytes de los dos bundles Linux | 2.506.485 | 2.221.126 |
+| Bytes de los dos bundles Windows | 560.674 | 566.159 |
+| Generación por fixture, segundos | 30,57 / 31,79 | 28,44 / 28,52 |
+| Build Linux de las dos fixtures, segundos | 120,88 | 113,45 |
+
+El gate de error medio es 0,0015; los estados sin claves/incorrectos deben diferir más de 0,006. Tiempos de generación/build son observaciones únicas con caché existente y no percentiles de builds limpios. El payload medido sigue siendo de un solo mip.
+
+**Performance:** **281.108 frames**, 18 ejecuciones aisladas y 24 rondas pareadas/72 bloques en un player propio SDK-free Release, Vulkan, Gamma, mono/unlit, Intel Arc A750 y 1920×1080, sin VSync. Dos renderers/dos slots por copia; medianas de draws y triángulos iguales: 4/384 para una copia y 64/6.144 para dieciséis. Los bundles y valores demo se congelaron antes de las correcciones de canales de los clips de la suite visual; el benchmark elimina Animator en todas las variantes y no ejecuta esos clips.
+
+| Copias | Original GPU, ms | MeshGuard GPU, ms | Mesh+Texture GPU, ms | Incremento Texture−Mesh, ms | IC exploratorio por ronda |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 0,41706 | 0,43135 | 0,69526 | 0,26531 | 0,24831–0,27086 |
+| 16 | 0,71242 | 0,74435 | 1,09849 | 0,34286 | 0,33966–0,35077 |
+
+Los FPS derivados de la mediana del intervalo de frame son ≈1.906/1.840/1.199 con una copia y ≈1.166/1.105/763 con dieciséis, para original/mesh/texture. Son valores de esta aplicación propia, no predicciones de VRChat ni un presupuesto de avatares completos. Las diferencias GPU/CPU y los datos por ronda/repetición se conservan en JSON/CSV; no se usan frames correlacionados como repeticiones independientes.
+
+El error adicional **Texture frente a Mesh** en el player alcanza **1/255**, con medias ≈0,00001009/0,00001106 para 1/16 copias. Una diferencia aislada de silueta llega a 43/255 frente al original en tres canales de la comparación Mesh de una copia; ya aparece en el control sin TextureGuard (36 píxeles no idénticos, error medio ≈6,87×10⁻⁸). No se presenta el render como bit idéntico.
+
+Por proceso, el DRM local total/residente sube ≈**14,03 MiB** con la variante texturada y RSS ≈**5,6–6,1 MiB** frente a MeshGuard. Son asignaciones completas del proceso/driver, incluyendo shaders y pipelines; no VRAM exclusiva de texels. Bundles control: original **158.351**, mesh **191.992**, mesh+texture **713.082 bytes**. Point realiza una lectura de texel y Bilinear cuatro. La diversidad por slot/material tiene coste de memoria/shaders y no se declara gratuita.
+
+**Regressions:** **184 ShaderForge + 684 atributos + 53 binding + 44 prototipo + 83 fundación = 1.048**, con 13 shaders Windows adicionales. El piloto standalone conserva **293 Gamma + 293 Linear = 586** comprobaciones y sus 518 PNG. Seis tests OSC de loopback correctos. [LAGTextureIntegrationImportSmoke.cs](../Tests/LAGTextureIntegrationImportSmoke.cs) compila/ejecuta APIs sin SDK ni lilToon, reproduce mallas privadas schemas 1/2/3/4 y valida la textura standalone; no ejecuta el forge contextual sin fuentes de lilToon.
+
+**Known issues:** solo albedo opaco y un mip; faltan formatos/features adicionales, mipmaps, compresión y análisis de instrucciones del fragment shader. No se certifican skinning, blendshapes, SDK, iluminación/stereo ni runtime D3D/cliente. El extractor HLSL+parámetros sigue recuperando todos los texels; no hay resistencia demostrada a extracción adaptativa/GPU. Persisten los avisos de cierre del Editor con SDK (Persistent/TransformAccessArray y, en algunas ejecuciones, `m_TaskQueue.empty()`/JobTempAlloc); no se atribuyen a este cambio ni se declara estabilidad/memoria limpia. Las primeras ejecuciones fallidas por comparación de tags, constructor interno del harness, lectura del provider y canales parciales de la fixture se corrigen y no cuentan como resultados finales.
+
+**Evidence:** `evidence/texture-integration/{gamma,linear}/`, `benchmark/summary.json`/CSV/DRM y `process-resources.json`, `sdk-free.json`, `final-runs.json` y `evidence-manifest.json`; comparativas `comparison.png`, `performance.png/.svg`, `quality.png` y logs de ejecución. Evidencia ignorada por Git; únicamente contenido propio y procesos de Unity/player propio. VRChat permaneció cerrado durante el benchmark y no se analizó/capturó su proceso. No se publica un unitypackage nuevo en esta etapa.
+
+**Next stage:** Stage 13, MetadataGuard, conservando rutas/nombres/parámetros funcionales. Las ampliaciones de TextureGuard (pirámides por mip, minificación y formatos) y la validación de avatar/SDK quedan como requisitos abiertos antes de habilitar el asistente.
+
 ## Fundación de validación y ciclo de vida
 
 **Status:** metadata y rollback de preparación implementados; validador del SDK pendiente.
@@ -240,7 +284,7 @@ No añadir opciones de seguridad a la interfaz que todavía no tengan implementa
 | 9 | Performance benchmark | Benchmark rígido completado: 36 procesos, 24 rondas pareadas, 403.103 frames y recursos/ISA medidos; SDK/skinning pendientes. |
 | 10 | TextureGuard research | Investigación entregada; contrato/restricciones del piloto y criterios de calidad definidos. |
 | 11 | TextureGuard prototype | Piloto de albedo opaco validado: 586 checks Gamma/Linear, 128 comparaciones, 518 PNG y bundles Vulkan/Windows. |
-| 12 | TextureGuard integration | Pendiente; contexto binding/slot, persistencia/clips, formatos/mips y benchmark antes del asistente. |
+| 12 | TextureGuard integration | Integración rígida contextual y benchmark implementados; RGB24/ST, schema 4 y clips. Mips/compresión y avatar/SDK pendientes antes del asistente. |
 | 13 | MetadataGuard | Pendiente; preservar nombres funcionales y schema OSC legacy. |
 | 14 | Fingerprint research | Pendiente; definir amenazas, controles y detector. |
 | 15 | Mesh fingerprint | Pendiente; sobrevivir transformaciones y reorder con error visual medido. |

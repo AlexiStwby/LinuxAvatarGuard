@@ -19,17 +19,18 @@ namespace LinuxAvatarGuard
         public const int Version = 1;
         public string Fingerprint { get; }
         public ReadOnlyCollection<AnimationClip> Clips { get; }
+        public bool TextureTransformsEnabled { get; }
         internal GameObject Root { get; }
         internal Animator Animator { get; }
         internal RuntimeAnimatorController Controller => Animator ? Animator.runtimeAnimatorController : null;
         readonly Dictionary<Renderer, HashSet<Material>[]> materials;
         readonly Dictionary<Renderer, HashSet<int>> selectors;
         GuardAnimationContext(GameObject root, Animator animator, Dictionary<Renderer,HashSet<Material>[]> mats,
-            Dictionary<Renderer,HashSet<int>> ids, AnimationClip[] clips, string hash)
-        { Root=root; Animator=animator; materials=mats; selectors=ids; Clips=Array.AsReadOnly(clips); Fingerprint=hash; }
+            Dictionary<Renderer,HashSet<int>> ids, AnimationClip[] clips, string hash, bool textureTransforms = false)
+        { Root=root; Animator=animator; materials=mats; selectors=ids; Clips=Array.AsReadOnly(clips); Fingerprint=hash; TextureTransformsEnabled=textureTransforms; }
         public void Validate()
         {
-            if (!Root || Capture(Root).Fingerprint!=Fingerprint) throw new InvalidOperationException("Cambió el contexto de animación/materiales después del análisis.");
+            if (!Root || Capture(Root,TextureTransformsEnabled).Fingerprint!=Fingerprint) throw new InvalidOperationException("Cambió el contexto de animación/materiales después del análisis.");
         }
         internal Material[] Materials(Renderer renderer) => materials[renderer].SelectMany(m=>m).Distinct().OrderBy(Identity,StringComparer.Ordinal).ToArray();
         internal Material[] Materials(Renderer renderer,int slot) => materials[renderer][slot].OrderBy(Identity,StringComparer.Ordinal).ToArray();
@@ -131,10 +132,11 @@ namespace LinuxAvatarGuard
                     !(keys[i].value==keys[i+1].value&&keys[i].outTangent==0&&keys[i+1].inTangent==0))
                     throw new InvalidOperationException("Curva ID Mask interpolada/overshoot no revisado: usa claves constantes/discretas.");
         }
-        static void MaterialCurve(Material material, string binding)
+        static void MaterialCurve(Material material, string binding, bool textureTransforms)
         {
             string full=binding.Substring(9), property=Regex.Replace(full,@"\.[rgbaxyzw]$","");
             string component=full.Length==property.Length ? "" : full.Substring(property.Length+1);
+            if(textureTransforms && property=="_MainTex_ST" && component.Length==1 && "xyzw".Contains(component) && material.HasProperty("_MainTex"))return;
             int index=-1;for(int i=0;i<ShaderUtil.GetPropertyCount(material.shader);i++)if(ShaderUtil.GetPropertyName(material.shader,i)==property){index=i;break;}
             if(index<0)throw new InvalidOperationException("Propiedad animada ausente en alguna variante/material posible.");
             var type=ShaderUtil.GetPropertyType(material.shader,index);
@@ -143,7 +145,7 @@ namespace LinuxAvatarGuard
                 type==ShaderUtil.ShaderPropertyType.Vector && component.Length==1&&"xyzw".Contains(component);
             if(!allowed)throw new InvalidOperationException("Tipo/componente de propiedad animada no revisado.");
         }
-        public static GuardAnimationContext Capture(GameObject root)
+        public static GuardAnimationContext Capture(GameObject root, bool allowTextureTransforms = false)
         {
             if(!root)throw new ArgumentNullException(nameof(root));
             var animators=root.GetComponentsInChildren<Animator>(true);
@@ -161,7 +163,7 @@ namespace LinuxAvatarGuard
             var clips=new HashSet<AnimationClip>();var files=new HashSet<string>();
             if(animator)Controllers(animator.runtimeAnimatorController,new HashSet<RuntimeAnimatorController>(),clips,files);
             if(clips.Count>256)throw new InvalidOperationException("Demasiados clips para el contrato contextual.");
-            var context=new GuardAnimationContext(root,animator,mats,ids,clips.OrderBy(Identity,StringComparer.Ordinal).ToArray(),null);
+            var context=new GuardAnimationContext(root,animator,mats,ids,clips.OrderBy(Identity,StringComparer.Ordinal).ToArray(),null,allowTextureTransforms);
             foreach(var clip in context.Clips)
             {
                 CleanAsset(clip,files);
@@ -197,7 +199,7 @@ namespace LinuxAvatarGuard
                 if(typeof(Renderer).IsAssignableFrom(binding.type)&&binding.propertyName.StartsWith("material.",StringComparison.Ordinal))
                 {
                     var r=context.RendererAt(binding);
-                    foreach(var material in context.Materials(r))MaterialCurve(material,binding.propertyName);
+                    foreach(var material in context.Materials(r))MaterialCurve(material,binding.propertyName,allowTextureTransforms);
                 }
             foreach(var renderer in mats.Keys)
             {
@@ -215,13 +217,15 @@ namespace LinuxAvatarGuard
                 using(var w=new BinaryWriter(stream,Encoding.UTF8,true))
                 {
                     w.Write("LAG/animation-context/v1");w.Write(Version);w.Write(animator!=null);
+                    // The original policy retains its exact fingerprint for private schemas 1–3.
+                    if(allowTextureTransforms)w.Write("LAG/texture-transform-policy/v1");
                     if(animator){w.Write(Identity(animator.runtimeAnimatorController));w.Write(animator.enabled);w.Write((int)animator.updateMode);w.Write((int)animator.cullingMode);}
                     foreach(string file in files.OrderBy(f=>f,StringComparer.Ordinal))
                     {w.Write(AssetDatabase.AssetPathToGUID(file));w.Write(MeshBindingIdentity.Digest(File.ReadAllBytes(file)));}
                     foreach(var r in mats.Keys.OrderBy(r=>AnimationUtility.CalculateTransformPath(r.transform,root.transform),StringComparer.Ordinal))
                     {w.Write(MeshBindingIdentity.Capture(root,r).StableId);foreach(var slot in mats[r]){w.Write(slot.Count);foreach(var m in slot.OrderBy(Identity,StringComparer.Ordinal))w.Write(Identity(m));}foreach(int v in ids[r].OrderBy(v=>v))w.Write(v);w.Write(-1);}
                 }
-                return new GuardAnimationContext(root,animator,mats,ids,context.Clips.ToArray(),MeshBindingIdentity.Digest(stream.ToArray()));
+                return new GuardAnimationContext(root,animator,mats,ids,context.Clips.ToArray(),MeshBindingIdentity.Digest(stream.ToArray()),allowTextureTransforms);
             }
         }
     }

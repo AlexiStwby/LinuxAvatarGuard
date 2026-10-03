@@ -15,6 +15,8 @@ namespace LinuxAvatarGuard.Performance
     [Serializable] public sealed class FixtureManifest
     {
         public string scope; public int[] publicFixtureUnlockValues; public FixtureVariant[] variants;
+        public string[] interleavedOrder;
+        public int expectedDrawsPerInstance, expectedTrianglesPerInstance;
     }
     [Serializable] public sealed class FixtureVariant
     {
@@ -25,7 +27,7 @@ namespace LinuxAvatarGuard.Performance
         [Serializable] sealed class CounterStatus { public string name, unit; public bool valid; }
         [Serializable] sealed class RunResult
         {
-            public string scope, variant, unity, gpu, graphics, driver, cpu, operatingSystem, status;
+            public string scope, variant, unity, gpu, graphics, driver, cpu, operatingSystem, status, colorSpace;
             public int instances, width, height, processorCount, gpuMemoryReportedMiB, samples, uniqueGpuSamples, droppedTimingReads;
             public long measurementStartedUnixMs, measurementEndedUnixMs;
             public double warmupSeconds, measurementSeconds, loadSeconds;
@@ -93,7 +95,7 @@ namespace LinuxAvatarGuard.Performance
                 camera.allowHDR = false; camera.allowMSAA = false; camera.useOcclusionCulling = false;
                 report = new RunResult {
                     scope = manifest.scope, variant = variant, instances = count, unity = Application.unityVersion,
-                    gpu = SystemInfo.graphicsDeviceName, graphics = SystemInfo.graphicsDeviceType.ToString(), driver = SystemInfo.graphicsDeviceVersion,
+                    gpu = SystemInfo.graphicsDeviceName, graphics = SystemInfo.graphicsDeviceType.ToString(), driver = SystemInfo.graphicsDeviceVersion, colorSpace = QualitySettings.activeColorSpace.ToString(),
                     cpu = SystemInfo.processorType, processorCount = SystemInfo.processorCount, operatingSystem = SystemInfo.operatingSystem,
                     gpuMemoryReportedMiB = SystemInfo.graphicsMemorySize, width = Screen.width, height = Screen.height,
                     development = Debug.isDebugBuild, frameTimingEnabled = FrameTimingManager.IsFeatureEnabled(), vsync = QualitySettings.vSyncCount != 0,

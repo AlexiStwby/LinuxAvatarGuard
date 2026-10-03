@@ -56,10 +56,11 @@ namespace LinuxAvatarGuard
     {
         public TextureProgram Program { get; }
         public string SourceFingerprint { get; }
+        public string BindingStableId { get; }
         internal Texture2D Source { get; }
         internal object Owner { get; }
-        internal TexturePlan(Texture2D source, TextureProgram program, string fingerprint, object owner)
-        { Source = source; Program = program; SourceFingerprint = fingerprint; Owner = owner; }
+        internal TexturePlan(Texture2D source, TextureProgram program, string fingerprint, object owner, string bindingId = null)
+        { Source = source; Program = program; SourceFingerprint = fingerprint; Owner = owner; BindingStableId = bindingId; }
     }
 
     public sealed class TextureDecoderFragment
@@ -81,6 +82,8 @@ namespace LinuxAvatarGuard
         public const int Grid = 4;
         readonly byte[] seed;
         readonly string scope;
+        readonly GuardTextureBindingIdentity binding;
+        readonly int[] expectedRuntimeKey;
         bool disposed;
         static readonly int[][] orders = {
             new[] {0,1,2}, new[] {0,2,1}, new[] {1,0,2}, new[] {1,2,0}, new[] {2,0,1}, new[] {2,1,0}
@@ -92,6 +95,10 @@ namespace LinuxAvatarGuard
                 throw new ArgumentException("TextureGuard: seed de 32 bytes y scope explícito válidos requeridos.");
             this.seed = (byte[])seed.Clone(); this.scope = scope;
         }
+        // Contextual builds preserve the historical shared keys, including individual zero lanes.
+        internal TextureGuardCodecV1(byte[] seed, GuardTextureBindingIdentity binding, int[] runtimeKey)
+            : this(seed, "LAG/texture-binding/v1/" + binding.StableId)
+        { this.binding = binding; expectedRuntimeKey = (int[])runtimeKey.Clone(); }
         void RequireAlive()
         {
             if (disposed) throw new ObjectDisposedException(nameof(TextureGuardCodecV1));
@@ -99,10 +106,10 @@ namespace LinuxAvatarGuard
                 GraphicsSettings.currentRenderPipeline != null || Application.unityVersion != "2022.3.22f1")
                 throw new InvalidOperationException("TextureGuard experimental: solo Unity 2022.3.22f1, Linux, Vulkan y Built-in revisados.");
         }
-        internal static void RequireSource(Texture2D source)
+        internal static void RequireSource(Texture2D source, bool allowRgb24 = false)
         {
-            if (!source || !source.isReadable || source.format != TextureFormat.RGBA32 || source.mipmapCount != 1 || source.streamingMipmaps)
-                throw new InvalidOperationException("TextureGuard: fuente legible RGBA32 sin compresión, mipmaps ni streaming requerida; no se modifica el importador.");
+            if (!source || !source.isReadable || (source.format != TextureFormat.RGBA32 && !(allowRgb24 && source.format == TextureFormat.RGB24)) || source.mipmapCount != 1 || source.streamingMipmaps)
+                throw new InvalidOperationException("TextureGuard: fuente legible RGBA32 (o RGB24 contextual), sin compresión, mipmaps ni streaming requerida; no se modifica el importador.");
             if (source.width != source.height || source.width < 16 || source.width > 1024 || (source.width & (source.width - 1)) != 0)
                 throw new InvalidOperationException("TextureGuard: tamaño cuadrado power-of-two entre 16 y 1024 requerido.");
             if ((source.filterMode != FilterMode.Point && source.filterMode != FilterMode.Bilinear) || source.anisoLevel > 1 ||
@@ -116,13 +123,13 @@ namespace LinuxAvatarGuard
                 (textureImporter.textureType != TextureImporterType.Default || textureImporter.mipmapEnabled || textureImporter.streamingMipmaps ||
                  textureImporter.textureCompression != TextureImporterCompression.Uncompressed))
                 throw new InvalidOperationException("TextureGuard: importador Default, sin compresión/mipmaps/streaming requerido.");
-            if (source.GetPixelData<Color32>(0).Any(p => p.a != 255))
+            if (source.format == TextureFormat.RGBA32 && source.GetPixelData<Color32>(0).Any(p => p.a != 255))
                 throw new InvalidOperationException("TextureGuard: solo albedo con todos los texels opacos; alfa transparente/cutout pendiente.");
         }
         static bool SupportedWrap(TextureWrapMode mode) => mode == TextureWrapMode.Clamp || mode == TextureWrapMode.Repeat;
-        static string Fingerprint(Texture2D source)
+        internal static string Fingerprint(Texture2D source, bool allowRgb24 = false)
         {
-            RequireSource(source);
+            RequireSource(source, allowRgb24);
             using (var stream = new MemoryStream())
             {
                 using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
@@ -143,7 +150,9 @@ namespace LinuxAvatarGuard
         }
         public TexturePlan Plan(Texture2D source)
         {
-            RequireAlive(); string fingerprint = Fingerprint(source);
+            RequireAlive();
+            if (binding != null) { binding.Validate(); if (source != binding.Source) throw new InvalidOperationException("TextureGuard: fuente ajena al binding contextual."); }
+            string fingerprint = Fingerprint(source, binding != null);
             byte[] key;
             using (var hmac = new HMACSHA256(seed)) key = hmac.ComputeHash(Encoding.UTF8.GetBytes("LAG/texture/v1/program\0" + fingerprint + "\0" + scope));
             try
@@ -154,7 +163,7 @@ namespace LinuxAvatarGuard
                     for (int i = destinations.Length - 1; i > 0; i--)
                     { int j = random.Next(i + 1); int temp = destinations[i]; destinations[i] = destinations[j]; destinations[j] = temp; }
                     var tiles = destinations.Select(d => new TextureTile(d, random.Next(8), random.Next(6), random.Next(256), random.Next(256), random.Next(256))).ToArray();
-                    return new TexturePlan(source, new TextureProgram(source, tiles), fingerprint, this);
+                    return new TexturePlan(source, new TextureProgram(source, tiles), fingerprint, this, binding?.StableId);
                 }
             }
             finally { Array.Clear(key, 0, key.Length); }
@@ -162,19 +171,22 @@ namespace LinuxAvatarGuard
         public void Validate(Texture2D source, TexturePlan plan)
         {
             RequireAlive();
-            if (plan == null || plan.Owner != this || plan.Source != source || Fingerprint(source) != plan.SourceFingerprint)
+            binding?.Validate();
+            if (plan == null || plan.Owner != this || plan.Source != source || plan.BindingStableId != binding?.StableId || Fingerprint(source, binding != null) != plan.SourceFingerprint)
                 throw new InvalidOperationException("TextureGuard: plan de otro codec/fuente o fuente/importador modificado.");
         }
-        static void RequireKey(int[] key)
+        void RequireKey(int[] key)
         {
-            if (key == null || key.Length != 4 || key.Any(k => k < 1 || k > 255))
-                throw new ArgumentException("TextureGuard: cuatro valores de encoding entre 1 y 255 requeridos.");
+            int minimum = binding == null ? 1 : 0;
+            if (key == null || key.Length != 4 || key.Any(k => k < minimum || k > 255) || key.All(k => k == 0) ||
+                (expectedRuntimeKey != null && !key.SequenceEqual(expectedRuntimeKey)))
+                throw new ArgumentException("TextureGuard: claves de encoding inválidas o ajenas al contexto.");
         }
         public Texture2D Encode(Texture2D source, TexturePlan plan, int[] runtimeKey)
         {
             Validate(source, plan); RequireKey(runtimeKey);
             int size = plan.Program.Size, tileSize = size / Grid;
-            var pixels = source.GetPixelData<Color32>(0).ToArray();
+            var pixels = source.format == TextureFormat.RGB24 ? source.GetPixels32(0) : source.GetPixelData<Color32>(0).ToArray();
             var encoded = new Color32[pixels.Length]; Texture2D result = null;
             try
             {
@@ -196,7 +208,7 @@ namespace LinuxAvatarGuard
                 // Load reads these linear UNORM bytes. Preserve the shared sampler's source settings.
                 result = new Texture2D(size, size, TextureFormat.RGBA32, false, true) {
                     name = "t_" + ProgramHash(plan).Substring(0, 20), filterMode = source.filterMode,
-                    wrapModeU = source.wrapModeU, wrapModeV = source.wrapModeV, anisoLevel = 0
+                    wrapModeU = source.wrapModeU, wrapModeV = source.wrapModeV, anisoLevel = 0, mipMapBias = source.mipMapBias
                 };
                 result.SetPixels32(encoded); result.Apply(false, true); Validate(source, plan);
                 return result;
@@ -275,7 +287,8 @@ namespace LinuxAvatarGuard
             text.Append("}\n#endif\n");
             return new TextureDecoderFragment(text.ToString());
         }
-        public void Dispose() { if (disposed) return; disposed = true; Array.Clear(seed, 0, seed.Length); }
+        public void Dispose()
+        { if (disposed) return; disposed = true; Array.Clear(seed, 0, seed.Length); if (expectedRuntimeKey != null) Array.Clear(expectedRuntimeKey, 0, expectedRuntimeKey.Length); }
         sealed class TextureStream : IDisposable
         {
             readonly HMACSHA256 hmac;

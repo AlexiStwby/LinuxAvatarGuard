@@ -13,7 +13,7 @@ namespace LinuxAvatarGuard.Performance
 {
     public sealed class InterleavedProbe : MonoBehaviour
     {
-        static readonly string[] Names = { "original", "legacy", "forge" };
+        string[] names = { "original", "legacy", "forge" };
         static readonly int[][] Orders = { new[]{0,1,2},new[]{0,2,1},new[]{1,0,2},new[]{1,2,0},new[]{2,0,1},new[]{2,1,0} };
         struct Sample
         {
@@ -22,9 +22,11 @@ namespace LinuxAvatarGuard.Performance
         }
         [Serializable] sealed class Report
         {
-            public string scope, mode="within-process-interleaved", status, gpu, cpu, driver, unity;
+            public string scope, mode="within-process-interleaved", status, gpu, cpu, driver, unity, colorSpace;
             public int instances, rounds=12, samples, width, height, discardedSwitchFrames=16;
             public int geometryCounterMismatches;
+            public int expectedDrawsPerInstance,expectedTrianglesPerInstance;
+            public string[] variantOrder;
             public double secondsPerBlock=1, warmupSecondsPerVariant=2;
             public bool frameTimingEnabled, development, vsync, allVariantsResident=true;
         }
@@ -52,12 +54,18 @@ namespace LinuxAvatarGuard.Performance
                 output=Arg("--lag-output");if(!Path.IsPathRooted(output))throw new ArgumentException("Absolute output required.");Directory.CreateDirectory(output);
                 string config=Arg("--lag-config");var manifest=JsonUtility.FromJson<FixtureManifest>(File.ReadAllText(config));
                 if(manifest.scope!="owned-procedural-rigid-liltoon-fixture")throw new InvalidOperationException("Owned fixture required.");
+                if(manifest.interleavedOrder!=null&&manifest.interleavedOrder.Length!=0)
+                {
+                    if(manifest.interleavedOrder.Length!=3||manifest.interleavedOrder.Distinct().Count()!=3||manifest.interleavedOrder.Any(id=>!manifest.variants.Any(v=>v.id==id)))
+                        throw new ArgumentException("Three distinct owned variants are required.");
+                    names=manifest.interleavedOrder;
+                }
                 int count=int.Parse(Arg("--lag-instances"),CultureInfo.InvariantCulture);if(count!=1&&count!=16)throw new ArgumentException("Unknown instance matrix.");
                 Application.runInBackground=true;Application.targetFrameRate=-1;QualitySettings.vSyncCount=0;QualitySettings.antiAliasing=0;QualitySettings.shadows=ShadowQuality.Disable;
                 RenderSettings.fog=false;RenderSettings.ambientMode=AmbientMode.Flat;RenderSettings.ambientLight=Color.white;
-                for(int v=0;v<Names.Length;v++)
+                for(int v=0;v<names.Length;v++)
                 {
-                    var item=manifest.variants.Single(x=>x.id==Names[v]);
+                    var item=manifest.variants.Single(x=>x.id==names[v]);
                     var bundle=AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(config),item.bundle));if(!bundle)throw new Exception("Native bundle unavailable.");bundles.Add(bundle);
                     foreach(string shaderPath in item.providers.Concat(item.shaders).Distinct())
                     {var shader=bundle.LoadAsset<Shader>(shaderPath);if(!shader||!shader.isSupported)throw new Exception("Native shader unsupported: "+shaderPath);}
@@ -75,7 +83,9 @@ namespace LinuxAvatarGuard.Performance
                 camera.orthographic=true;camera.orthographicSize=count==1?1.1f:4.2f;camera.nearClipPlane=.1f;camera.farClipPlane=30;camera.transform.position=new Vector3(0,0,-10);
                 camera.allowHDR=false;camera.allowMSAA=false;camera.useOcclusionCulling=false;
                 report=new Report{scope=manifest.scope,instances=count,width=Screen.width,height=Screen.height,frameTimingEnabled=FrameTimingManager.IsFeatureEnabled(),
-                    development=Debug.isDebugBuild,vsync=QualitySettings.vSyncCount!=0,gpu=SystemInfo.graphicsDeviceName,cpu=SystemInfo.processorType,driver=SystemInfo.graphicsDeviceVersion,unity=Application.unityVersion};
+                    variantOrder=names,expectedDrawsPerInstance=manifest.expectedDrawsPerInstance>0?manifest.expectedDrawsPerInstance:2,
+                    expectedTrianglesPerInstance=manifest.expectedTrianglesPerInstance>0?manifest.expectedTrianglesPerInstance:49152,
+                    development=Debug.isDebugBuild,vsync=QualitySettings.vSyncCount!=0,gpu=SystemInfo.graphicsDeviceName,cpu=SystemInfo.processorType,driver=SystemInfo.graphicsDeviceVersion,unity=Application.unityVersion,colorSpace=QualitySettings.activeColorSpace.ToString()};
                 if(report.width!=1920||report.height!=1080||!report.frameTimingEnabled)throw new Exception("Resolution or timing contract failed.");
                 draws=ProfilerRecorder.StartNew(ProfilerCategory.Render,"Draw Calls Count",1);triangles=ProfilerRecorder.StartNew(ProfilerCategory.Render,"Triangles Count",1);
                 if(!draws.Valid||!triangles.Valid)throw new Exception("Rendering counters unavailable.");
@@ -84,7 +94,7 @@ namespace LinuxAvatarGuard.Performance
             catch(Exception error){Fail(error);}
         }
         void Activate(int index)
-        {current=index;for(int v=0;v<Names.Length;v++)foreach(var root in groups[v])root.SetActive(v==index);switchedFrames=0;}
+        {current=index;for(int v=0;v<names.Length;v++)foreach(var root in groups[v])root.SetActive(v==index);switchedFrames=0;}
         void Update()
         {
             if(done||report==null)return;
@@ -113,7 +123,7 @@ namespace LinuxAvatarGuard.Performance
                         // Rendering counters describe a different (previous) frame from the
                         // delayed GPU timing. Keep transient values in the RAW report; validate
                         // steady block medians afterward instead of dropping timing outliers.
-                        if(draws.LastValue!=2*report.instances||triangles.LastValue!=49152*report.instances)report.geometryCounterMismatches++;
+                        if(draws.LastValue!=report.expectedDrawsPerInstance*report.instances||triangles.LastValue!=report.expectedTrianglesPerInstance*report.instances)report.geometryCounterMismatches++;
                         samples[sampleCount++]=new Sample{round=round,variant=current,interval=(now-previous)*1000,cpuMain=t.cpuMainThreadFrameTime,cpuRender=t.cpuRenderThreadFrameTime,
                             gpu=t.gpuFrameTime,timestamp=lastTimestamp,draws=draws.LastValue,triangles=triangles.LastValue};
                     }
@@ -135,7 +145,7 @@ namespace LinuxAvatarGuard.Performance
             {
                 file.WriteLine("round,variant,interval_ms,cpu_main_ms,cpu_render_ms,gpu_ms,timestamp,draw_calls,triangles");
                 for(int i=0;i<sampleCount;i++)
-                {var s=samples[i];file.WriteLine(s.round+","+Names[s.variant]+","+string.Join(",",new[]{s.interval,s.cpuMain,s.cpuRender,s.gpu}.Select(x=>x.ToString("R",CultureInfo.InvariantCulture)))+","+s.timestamp+","+s.draws+","+s.triangles);}
+                {var s=samples[i];file.WriteLine(s.round+","+names[s.variant]+","+string.Join(",",new[]{s.interval,s.cpuMain,s.cpuRender,s.gpu}.Select(x=>x.ToString("R",CultureInfo.InvariantCulture)))+","+s.timestamp+","+s.draws+","+s.triangles);}
             }
             File.WriteAllText(Path.Combine(output,"run.json"),JsonUtility.ToJson(report,true));
         }

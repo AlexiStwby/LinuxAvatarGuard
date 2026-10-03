@@ -60,18 +60,22 @@ public static class LAGTextureValidation
         AssetDatabase.CreateAsset(material, Folder + "/" + name + ".mat"); AssetDatabase.SaveAssetIfDirty(material);
         return material;
     }
-    static Color32[] ReadPayload(Texture2D encoded)
+    public static Color32[] ReadPayload(Texture2D encoded)
     {
         var request = AsyncGPUReadback.Request(encoded, 0, TextureFormat.RGBA32); request.WaitForCompletion();
         if (request.hasError) throw new Exception("Owned texture GPU readback failed");
         return request.GetData<Color32>().ToArray();
     }
     // Independent adaptive extractor: parse emitted HLSL constants, not the codec's CPU methods or typed instructions.
-    static Color32[] Extract(Color32[] payload, int size, string hlsl, int[] key)
+    public static Color32[] Extract(Color32[] payload, int size, string hlsl, int[] key)
     {
         var matches = Regex.Matches(hlsl, @"if \(tile == (\d+)u\) \{ atlas = (\d+)u; op = (\d+)u; order = (\d+)u; salts = uint3\((\d+)u,(\d+)u,(\d+)u\); \}");
-        if (matches.Count != 16) throw new Exception("Independent extractor did not find sixteen tiles");
-        var rows = matches.Cast<Match>().ToDictionary(m => int.Parse(m.Groups[1].Value), m => Enumerable.Range(2,6).Select(i => int.Parse(m.Groups[i].Value)).ToArray());
+        if (matches.Count == 0 || matches.Count % 16 != 0) throw new Exception("Independent extractor did not find complete sixteen-tile programs");
+        var first = matches.Cast<Match>().Take(16).ToArray();
+        if (!first.Select(m=>int.Parse(m.Groups[1].Value)).OrderBy(i=>i).SequenceEqual(Enumerable.Range(0,16)) ||
+            matches.Cast<Match>().Where((m,i)=>m.Value!=first[i%16].Value).Any())
+            throw new Exception("Independent extractor found inconsistent provider program copies");
+        var rows = first.ToDictionary(m => int.Parse(m.Groups[1].Value), m => Enumerable.Range(2,6).Select(i => int.Parse(m.Groups[i].Value)).ToArray());
         string[] orders = {"RGB","RBG","GRB","GBR","BRG","BGR"};
         var decoded = new Color32[payload.Length]; int side = size/4;
         for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
@@ -87,7 +91,7 @@ public static class LAGTextureValidation
         }
         return decoded;
     }
-    static int ByteError(Color32[] a, Color32[] b) => a.Zip(b, (x,y) => new[] {Math.Abs(x.r-y.r),Math.Abs(x.g-y.g),Math.Abs(x.b-y.b),Math.Abs(x.a-y.a)}.Max()).Max();
+    public static int ByteError(Color32[] a, Color32[] b) => a.Zip(b, (x,y) => new[] {Math.Abs(x.r-y.r),Math.Abs(x.g-y.g),Math.Abs(x.b-y.b),Math.Abs(x.a-y.a)}.Max()).Max();
     static float ByteMean(Color32[] a, Color32[] b) => a.Zip(b, (x,y) => (Math.Abs(x.r-y.r)+Math.Abs(x.g-y.g)+Math.Abs(x.b-y.b))/765f).Average();
     static void SavePixels(Color32[] pixels, int size, string path)
     {

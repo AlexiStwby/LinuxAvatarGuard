@@ -208,7 +208,13 @@ public static class LAGShaderForgeValidation
         string publicText=File.ReadAllText(a.PublicManifestPath);
         Check(!publicText.Contains("masterSeed")&&!publicText.Contains("runtimeKey")&&publicText.Contains("\"attributePolicy\": 2")&&publicText.Contains("\"sdkProcessed\": false"),"public manifest binds contextual policy and declares research limits without secrets");
         string privatePath=c.SavePrivate(),privateText=File.ReadAllText(privatePath);var animation=GuardAnimationContext.Capture(f.Root);
-        try{File.WriteAllText(privatePath,privateText.Replace("\"schemaVersion\": 3","\"schemaVersion\": 2"));Check(Rejects(()=>GuardBuildContext.LoadPrivate(c.BuildId)),"contextual policy cannot be downgraded into private schema 2");}
+        try{File.WriteAllText(privatePath,privateText.Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion,"\"schemaVersion\": 2"));Check(Rejects(()=>GuardBuildContext.LoadPrivate(c.BuildId)),"contextual policy cannot be downgraded into private schema 2");}
+        finally{File.WriteAllText(privatePath,privateText);}
+        try
+        {
+            File.WriteAllText(privatePath,privateText.Replace("\"schemaVersion\": "+GuardBuildContext.SchemaVersion,"\"schemaVersion\": 3"));
+            using(var historical=GuardBuildContext.LoadPrivate(c.BuildId))Check(historical.TextureBindingCount==0&&historical.BindingCount==c.BindingCount,"historical mesh-only schema 3 remains readable without texture records");
+        }
         finally{File.WriteAllText(privatePath,privateText);}
         using(var restored=GuardBuildContext.LoadPrivate(c.BuildId))
         {

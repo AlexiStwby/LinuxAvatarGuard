@@ -32,7 +32,7 @@ namespace LinuxAvatarGuard
             public string codec = TextureGuardCodecV1.Id, status = "ResearchOnly", programHash;
             public bool sdkProcessed = false, mipmapsSupported = false, compressedPayloadSupported = false;
         }
-        static string MaterialState(Material material)
+        internal static string MaterialState(Material material)
         {
             if (!material || !material.shader || material.shader.name != "lilToon" || !AssetDatabase.Contains(material) || EditorUtility.IsDirty(material) || material.shaderKeywords.Length != 0)
                 throw new InvalidOperationException("TextureGuard: material persistente/guardado lilToon opaco sin keywords requerido.");
